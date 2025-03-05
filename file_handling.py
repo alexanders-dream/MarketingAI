@@ -3,6 +3,11 @@ from PyPDF2 import PdfReader
 from docx import Document
 import streamlit as st
 
+def validate_file(file):
+    if file.size > 5 * 1024 * 1024:  # 5MB
+        return False
+    return file.name.split('.')[-1] in ['pdf', 'docx', 'txt']
+
 def extract_text_from_file(uploaded_file):
     """Extract text from PDF, DOCX, or TXT files."""
     if uploaded_file.name.endswith('.pdf'):

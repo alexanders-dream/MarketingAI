@@ -1,6 +1,9 @@
 # utils.py
 import requests
 import streamlit as st
+from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatOllama
 
 @st.cache_data
 def fetch_models(provider, endpoint, api_key=None):
@@ -31,3 +34,28 @@ def fetch_models(provider, endpoint, api_key=None):
             return []
         
     return []
+
+# utils.py
+class ProviderHandler:
+    @staticmethod
+    def create_client(provider, model, api_key, endpoint):
+        providers = {
+            "Groq": lambda: ChatGroq(
+                model=model,
+                api_key=api_key,
+                base_url="https://api.groq.com/",
+                temperature=0.7
+            ),
+            "OpenAI": lambda: ChatOpenAI(
+                model=model,
+                api_key=api_key,
+                base_url=endpoint,
+                temperature=0.7
+            ),
+            "Ollama": lambda: ChatOllama(
+                model=model,
+                base_url=endpoint,
+                temperature=0.7
+            )
+        }
+        return providers.get(provider)()

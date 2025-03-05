@@ -1,268 +1,241 @@
 # ui.py
 import streamlit as st
-from config import get_api_key  # Loads API keys from .env
+from config import get_api_key
 from file_handling import extract_text_from_file
 from data_extraction import extract_data_from_text
 from marketing_functions import generate_strategy, generate_campaign, generate_content, optimize_seo
-from utils import fetch_models
+from utils import fetch_models, ProviderHandler
+from file_handling import validate_file
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatOllama
 
 st.set_page_config(
-    page_title="Market Agent",
-    #page_icon="images/icon.png"
-)
+        page_title="Marketing Agent Pro",
+        page_icon="📈",
+        layout="wide"
+    )
+    
+# Custom CSS injection
+st.markdown("""
+<style>
+    .stTextInput label, .stTextArea label, .stSelectbox label { 
+        font-weight: 600 !important;
+        color: #2c3e50 !important;
+    }
+    .stAlert { 
+        border-left: 4px solid #2ecc71;
+        padding: 1rem;
+        background-color: #f8f9fa;
+    }
+    .card {
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin: 1rem 0;
+        background: white;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 def setup_sidebar():
-    # Sidebar title
-    st.sidebar.title("Marketing Agent")
+    """Configure the sidebar with AI settings"""
+    st.sidebar.title("⚙️ AI Configuration")
     
-    # Task selection section
-    st.sidebar.subheader("Select Task")
-    task = st.sidebar.selectbox(
-        "Choose a task",
-        ["Marketing Strategy", "Campaign Ideas", "Social Media Content", "SEO Optimization"],
-        key="task_select"
-    )
-    
-    # AI configuration section
-    st.sidebar.subheader("AI Configuration")
-    
-    # Provider selection
-    provider = st.sidebar.selectbox(
-        "Select AI Provider",
-        ["Groq", "OpenAI", "Ollama"],
-        key="provider_select"
-    )
-    
-    # API Endpoint (editable, with defaults per provider)
-    if "endpoints" not in st.session_state:
-        st.session_state.endpoints = {}
-    
-    default_endpoints = {
-        "Groq": "https://api.groq.com/openai/v1",
-        "OpenAI": "https://api.openai.com/v1",
-        "Ollama": "http://localhost:11434"
-    }
-    
-    current_endpoint = st.session_state.endpoints.get(provider, default_endpoints[provider])
-    endpoint = st.sidebar.text_input(
-        "API Endpoint",
-        value=current_endpoint,
-        key=f"endpoint_input_{provider}"
-    )
-    st.session_state.endpoints[provider] = endpoint
-    
-    # API Key (only for providers that require it, prefilled from .env, editable, with show/hide toggle)
-    if "api_keys" not in st.session_state:
-        st.session_state.api_keys = {}
-    
-    if provider != "Ollama":  # Only show API key input for Groq and OpenAI
-        default_api_key = get_api_key(provider)  # Expects GROQ_API_KEY, OPENAI_API_KEY, etc., in .env
-        current_api_key = st.session_state.api_keys.get(provider, default_api_key or "")
+    with st.sidebar:
+        provider = st.selectbox(
+            "AI Provider",
+            ["Groq", "OpenAI", "Ollama"],
+            key="provider_select",
+            help="Select your preferred AI service provider"
+        )
         
-        if f"show_api_key_{provider}" not in st.session_state:
-            st.session_state[f"show_api_key_{provider}"] = False
-        
-        
-        
-        if st.session_state[f"show_api_key_{provider}"]:
-            api_key = st.sidebar.text_input(
-                f"{provider} API Key",
-                value=current_api_key,
-                key=f"api_key_input_{provider}_text"
+        with st.expander("Advanced Settings", expanded=False):
+            default_endpoints = {
+                "Groq": "https://api.groq.com/openai/v1",
+                "OpenAI": "https://api.openai.com/v1",
+                "Ollama": "http://localhost:11434"
+            }
+            
+            endpoint = st.text_input(
+                "API Endpoint",
+                value=st.session_state.get("endpoint", default_endpoints[provider]),
+                key="endpoint_input"
             )
-        else:
-            api_key = st.sidebar.text_input(
-                f"{provider} API Key",
-                value=current_api_key,
-                type="password",
-                key=f"api_key_input_{provider}_password"
+            st.session_state.endpoint = endpoint
+            
+            if provider != "Ollama":
+                api_key = st.text_input(
+                    f"{provider} API Key",
+                    type="password",
+                    value=get_api_key(provider),
+                    help=f"Get your API key from {provider}'s dashboard"
+                )
+                st.session_state.api_key = api_key
+            else:
+                st.session_state.api_key = None
+
+        # Model selection with caching
+        if provider == "Ollama" or st.session_state.get("api_key"):
+            with st.spinner("Loading models..."):
+                models = fetch_models(
+                    provider,
+                    endpoint,
+                    st.session_state.get("api_key")
+                )
+                
+            model = st.selectbox(
+                "AI Model",
+                models,
+                key="model_select",
+                help="Select the model version to use"
             )
-        st.session_state.api_keys[provider] = api_key
-    else:
-        st.session_state.api_keys[provider] = None  # No API key needed for Ollama
-    
-    # Link to get API key (provider-specific)
-    if provider == "Groq":
-        st.sidebar.markdown('[Get Groq API Key](https://console.groq.com/keys)', unsafe_allow_html=True)
-    elif provider == "OpenAI":
-        st.sidebar.markdown('[Get OpenAI API Key](https://openai.com/api)', unsafe_allow_html=True)
-    # Add Ollama link if applicable
-    
-    # Model selection (fetch models based on provider, endpoint, and API key)
-    selected_model = None
-    if provider == "Ollama" or st.session_state.api_keys.get(provider):  # Fetch models for Ollama without API key
-        with st.spinner("Fetching models..."):
-            api_key = st.session_state.api_keys.get(provider) if provider != "Ollama" else None
-            models = fetch_models(provider, st.session_state.endpoints[provider], api_key)
-        if models:
-            selected_model = st.sidebar.selectbox("Select AI Model", models, key="model_select")
-        else:
-            st.sidebar.warning("No models available or failed to fetch models.")
-    else:
-        st.sidebar.warning("Please enter the API key to fetch models.")
-    
-    st.info(f"Using: {provider} - {selected_model if selected_model else 'No model selected'}")
-    
-    # Refresh models button
-    if st.sidebar.button("Refresh Models"):
-        st.cache_data.clear()  # Clears cache to refetch models
-    
-    # End session button
-    if st.sidebar.button("End Session"):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.experimental_rerun()  # Resets the app
-    
+            st.session_state.model = model
+            
+        st.sidebar.markdown("---")
+        task = st.selectbox(
+            "🎯 Select Task",
+            ["Marketing Strategy", "Campaign Ideas", "Social Media Content", "SEO Optimization"],
+            key="task_select"
+        )
+        
     return task
 
-# Function to instantiate LLM based on provider
-def get_llm(provider, model, api_key, endpoint):
-    if provider == "Groq":
-        return ChatGroq(
-            model=model, 
-            api_key=api_key, 
-            base_url="https://api.groq.com/", 
-            temperature=0.7, 
-            max_tokens=1000)
+def initialize_llm():
+    """Initialize the LLM client with current settings"""
+    provider = st.session_state.get("provider_select")
+    return ProviderHandler.create_client(
+        provider=provider,
+        model=st.session_state.get("model"),
+        api_key=st.session_state.get("api_key"),
+        endpoint=st.session_state.get("endpoint")
+    )
+
+def render_file_upload():
+    """File upload section with validation"""
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        uploaded_file = st.file_uploader(
+            "📁 Upload Marketing Document",
+            type=["pdf", "docx", "txt"],
+            help="Max file size: 5MB"
+        )
     
-    elif provider == "OpenAI":
-        return ChatOpenAI(
-            model=model, 
-            api_key=api_key, 
-            base_url=endpoint, 
-            temperature=0.7, 
-            max_tokens=1000)
-    
-    elif provider == "Ollama":
-        return ChatOllama(
-            model=model,
-            base_url=endpoint,
-            temperature=0.7
-        )  # No API key needed for Ollama
-    return None
+    if uploaded_file:
+        if not validate_file(uploaded_file):
+            st.error("Invalid file. Please check size and format.")
+            return None
+        
+        if 'current_file' not in st.session_state or st.session_state.current_file != uploaded_file.name:
+            with st.status("🔍 Analyzing document...", expanded=True) as status:
+                try:
+                    st.write("Extracting text...")
+                    text = extract_text_from_file(uploaded_file)
+                    
+                    st.write("Identifying key elements...")
+                    llm = initialize_llm()
+                    extracted_data = extract_data_from_text(llm, text)
+                    
+                    st.session_state.extracted_data = extracted_data
+                    st.session_state.current_file = uploaded_file.name
+                    status.update(label="Analysis complete!", state="complete", expanded=False)
+                    
+                except Exception as e:
+                    status.update(label="Analysis failed", state="error")
+                    st.error(f"Error processing file: {str(e)}")
+                    return None
+        else:
+            st.success("✅ Using previously analyzed document")
+            
+    return uploaded_file
+
+def render_task_interface(llm, task):
+    """Render the appropriate task interface"""
+    with st.container():
+        st.header(f"📋 {task}")
+        
+        if task == "Marketing Strategy":
+            with st.form("strategy_form"):
+                brand = st.text_area("Brand Description", 
+                                   value=st.session_state.extracted_data.get("brand_description", ""))
+                audience = st.text_area("Target Audience", 
+                                      value=st.session_state.extracted_data.get("target_audience", ""))
+                
+                if st.form_submit_button("🚀 Generate Strategy"):
+                    with st.spinner("Crafting strategy..."):
+                        result = generate_strategy(llm, brand, audience)
+                        st.session_state.result = result
+            
+        elif task == "Campaign Ideas":
+            with st.form("campaign_form"):
+                product_service = st.text_area("Products/Services", 
+                                               value=st.session_state.extracted_data.get("products_services", ""))
+                goals = st.text_area("Marketing Goals", 
+                                         value=st.session_state.extracted_data.get("marketing_goals", ""))
+                
+                if st.form_submit_button("🚀 Generate Campaign"):
+                    with st.spinner("Crafting campaign..."):
+                        result = generate_campaign(llm, product_service, goals)
+                        st.session_state.result = result
+
+        elif task == "Social Media Content":
+            with st.form("social_form"):
+                suggested_topics = st.session_state.extracted_data.get("suggested_topics", []) if 'extracted_data' in st.session_state else []
+                topic_options = ["Custom topic"] + suggested_topics
+                selected_topic = st.selectbox("Topic", topic_options)
+                topic = st.text_input("Custom Topic", "") if selected_topic == "Custom topic" else selected_topic
+                platform = st.selectbox("Platform", ["Instagram", "LinkedIn", "TikTok", "Facebook"])
+                tone = st.selectbox("Tone", ["Formal", "Casual", "Humorous", "Inspirational"])
+                target_audience = st.text_area("Target Audience", value=st.session_state.extracted_data.get("target_audience", ""))
+                
+                if st.form_submit_button("🚀 Generate Content"):
+                    with st.spinner("Crafting content..."):
+                        result = generate_content(llm, platform, topic, tone, target_audience)
+                        st.session_state.result = result
+        
+        elif task == "SEO Optimization":
+            with st.form("seo_form"):
+                #content_source = st.radio("Content Source", ["Extracted", "Custom"])
+                content = st.text_area("Content", value=st.session_state.extracted_data.get("existing_content", ""))
+                keywords = st.text_input("Keywords (comma-separated)", value=st.session_state.extracted_data.get("keywords", ""))
+                
+                if st.form_submit_button("🚀 Generate Content"):
+                    with st.spinner("Crafting content..."):
+                        result = optimize_seo(llm, content, keywords)
+                        st.session_state.result = result
+            pass
+        
+        if 'result' in st.session_state:
+            with st.container(border=True):
+                st.markdown(st.session_state.result)
+                st.download_button("💾 Download", st.session_state.result, f"{task.replace(' ', '_')}.md")
 
 def main():
-    # Main title updated to match sidebar
-    st.title("Marketing Agent")
+    
+    # Main header
+    st.title("Marketing Agent Pro")
+    st.markdown("---")
+    
+    # Setup sidebar and get selected task
     task = setup_sidebar()
     
-    # Dynamic LLM creation based on sidebar inputs
-    provider = st.session_state.get("provider_select")
-    if provider:
-        api_key = st.session_state.api_keys.get(provider)
-        endpoint = st.session_state.endpoints.get(provider)
-        model = st.session_state.get("model_select")
-        if (provider == "Ollama" or api_key) and model:  # Allow Ollama without API key
-            llm = get_llm(provider, model, api_key, endpoint)
-            if llm:
-                # File upload and task handling
-                uploaded_file = st.file_uploader("Upload a document (PDF, DOCX, TXT)", ["pdf", "docx", "txt"])
-                
-                if uploaded_file is not None:
-                    current_file_id = uploaded_file.name + str(uploaded_file.size)
-                    
-                    if 'previous_file_id' not in st.session_state or st.session_state.previous_file_id != current_file_id:
-                        with st.spinner("Extracting text..."):
-                            text = extract_text_from_file(uploaded_file)
-                        if text:
-                            with st.spinner("Extracting data..."):
-                                extracted_data = extract_data_from_text(llm, text)
-                                if extracted_data:
-                                    st.session_state.extracted_data = extracted_data
-                                    st.session_state.previous_file_id = current_file_id
-                                    st.success("Data extracted successfully!")
-                    else:
-                        st.write("Using previously extracted data.")
-                    
-                    # Re-extract data option
-                    if 'extracted_data' in st.session_state:
-                        if st.button("Re-extract Data"):
-                            with st.spinner("Extracting text..."):
-                                text = extract_text_from_file(uploaded_file)
-                            with st.spinner("Extracting data..."):
-                                extracted_data = extract_data_from_text(llm, text)
-                            st.session_state.extracted_data = extracted_data
-                            st.success("Data re-extracted successfully!")
-                else:
-                    if 'extracted_data' in st.session_state:
-                        del st.session_state.extracted_data
-                    if 'previous_file_id' in st.session_state:
-                        del st.session_state.previous_file_id
-                
-                # Task execution
-                if task == "Marketing Strategy":
-                    st.header("Generate Marketing Strategy")
-                    default_brand = st.session_state.extracted_data.get("brand_description", "") if 'extracted_data' in st.session_state else ""
-                    default_audience = st.session_state.extracted_data.get("target_audience", "") if 'extracted_data' in st.session_state else ""
-                    brand_description = st.text_area("Brand Description", default_brand)
-                    target_audience = st.text_area("Target Audience", default_audience)
-                    if st.button("Generate Strategy"):
-                        if brand_description and target_audience:
-                            with st.spinner("Generating..."):
-                                strategy = generate_strategy(llm, brand_description, target_audience)
-                            st.write(strategy)
-                            st.download_button("Download", strategy, "strategy.txt")
-                        else:
-                            st.warning("Please provide brand description and target audience.")
-                
-                elif task == "Campaign Ideas":
-                    st.header("Generate Campaign Ideas")
-                    default_products = st.session_state.extracted_data.get("products_services", "") if 'extracted_data' in st.session_state else ""
-                    default_goals = st.session_state.extracted_data.get("marketing_goals", "") if 'extracted_data' in st.session_state else ""
-                    product_service = st.text_area("Products/Services", default_products)
-                    goals = st.text_area("Marketing Goals", default_goals)
-                    if st.button("Generate Ideas"):
-                        if product_service and goals:
-                            with st.spinner("Generating..."):
-                                ideas = generate_campaign(llm, product_service, goals)
-                            st.write(ideas)
-                            st.download_button("Download", ideas, "campaign_ideas.txt")
-                        else:
-                            st.warning("Please provide products/services and goals.")
-                
-                elif task == "Social Media Content":
-                    st.header("Generate Social Media Content")
-                    suggested_topics = st.session_state.extracted_data.get("suggested_topics", []) if 'extracted_data' in st.session_state else []
-                    default_audience = st.session_state.extracted_data.get("target_audience", "") if 'extracted_data' in st.session_state else ""
-                    topic_options = ["Custom topic"] + suggested_topics
-                    selected_topic = st.selectbox("Topic", topic_options)
-                    topic = st.text_input("Custom Topic", "") if selected_topic == "Custom topic" else selected_topic
-                    platform = st.selectbox("Platform", ["Instagram", "LinkedIn", "TikTok", "Facebook"])
-                    tone = st.selectbox("Tone", ["Formal", "Casual", "Humorous", "Inspirational"])
-                    target_audience = st.text_area("Target Audience", default_audience)
-                    if st.button("Generate Content"):
-                        if topic:
-                            with st.spinner("Generating..."):
-                                content = generate_content(llm, platform, topic, tone, target_audience)
-                            st.write(content)
-                            st.download_button("Download", content, "post.txt")
-                        else:
-                            st.warning("Please provide a topic.")
-                
-                elif task == "SEO Optimization":
-                    st.header("Optimize SEO")
-                    extracted_content = st.session_state.extracted_data.get("existing_content", "") if 'extracted_data' in st.session_state else ""
-                    default_keywords = st.session_state.extracted_data.get("keywords", "") if 'extracted_data' in st.session_state else ""
-                    content_source = st.radio("Content Source", ["Extracted", "Custom"])
-                    content = st.text_area("Content", extracted_content if content_source == "Extracted" else "")
-                    keywords = st.text_input("Keywords (comma-separated)", default_keywords)
-                    if st.button("Optimize SEO"):
-                        if content and keywords:
-                            with st.spinner("Generating..."):
-                                suggestions = optimize_seo(llm, content, keywords)
-                            st.write(suggestions)
-                            st.download_button("Download", suggestions, "seo_suggestions.txt")
-                        else:
-                            st.warning("Please provide content and keywords.")
-            else:
-                st.warning("Failed to create LLM instance.")
+    # Initialize LLM client
+    llm = initialize_llm()
+    
+    # Main content area
+    with st.container():
+        tab_analysis, tab_manual = st.tabs(["📄 Document Analysis", "✍️ Manual Input"])
+        
+        with tab_analysis:
+            uploaded_file = render_file_upload()
+        
+        with tab_manual:
+            st.info("Coming soon: Direct input without document upload")
+        
+        if 'extracted_data' in st.session_state:
+            render_task_interface(llm, task)
         else:
-            st.warning("Please select a model and enter the API key (if required).")
-    else:
-        st.warning("Please select a provider.")
+            st.info("✨ Upload a document or use manual input to get started")
 
 if __name__ == "__main__":
     main()
