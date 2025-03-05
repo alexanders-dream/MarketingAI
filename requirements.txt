@@ -1,0 +1,10 @@
+langchain 
+langchain-groq
+langchain-community
+requests
+streamlit 
+python-dotenv
+PyPDF2
+python-docx
+chromadb
+
