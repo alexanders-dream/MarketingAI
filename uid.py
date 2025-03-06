@@ -7,23 +7,19 @@ from marketing_functions import generate_strategy, generate_campaign, generate_c
 from utils import fetch_models, ProviderHandler
 from rag_utils import split_text_into_chunks, embed_chunks, get_chroma_collection, add_documents_to_collection
 
-st.set_page_config(
-    page_title="Marketing Agent Pro",
-    page_icon="📈",
-    layout="wide"
-)
+
 
 # Custom CSS injection
 st.markdown("""
 <style>
     .stTextInput label, .stTextArea label, .stSelectbox label { 
         font-weight: 600 !important;
-        color: #2c3e50 !important;
+        color: #ffffff !important;
     }
     .stAlert { 
         border-left: 4px solid #2ecc71;
         padding: 1rem;
-        background-color: #f8f9fa;
+        background-color: #2c3e50;
     }
     .card {
         padding: 1.5rem;
@@ -217,8 +213,8 @@ def render_task_interface(llm, task):
                 st.download_button("💾 Download", st.session_state.result, f"{task.replace(' ', '_')}.md")
 
 def main():
-    #st.title("Marketing Agent Pro")
-   # st.markdown("---")
+    st.title("Marketing Agent Pro")
+    st.markdown("---")
     
     task, use_rag = setup_sidebar()
     llm = initialize_llm()

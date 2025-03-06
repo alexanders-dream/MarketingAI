@@ -1,12 +1,32 @@
 # data_extraction.py
 import json
 import streamlit as st
+from rag_utils import get_chroma_collection, retrieve_relevant_chunks
 
+def extract_data_from_text(llm, text, file_id=None):
+    """Extract structured marketing data from text using RAG and the AI model."""
+    # If file_id is provided, use RAG to retrieve relevant chunks
+    retrieved_context = ""
+    if file_id:
+        collection = get_chroma_collection(file_id)
+        # Define queries for each data field to retrieve relevant chunks
+        queries = {
+            "brand_description": "What is the brand description?",
+            "target_audience": "Who is the target audience?",
+            "products_services": "What are the products or services?",
+            "marketing_goals": "What are the marketing goals?",
+            "existing_content": "What existing content is mentioned?",
+            "keywords": "What keywords are relevant?",
+            "suggested_topics": "What topics could be used for social media?"
+        }
+        retrieved_chunks = []
+        for field, query in queries.items():
+            chunks = retrieve_relevant_chunks(collection, query, n_results=2)
+            retrieved_chunks.extend(chunks)
+        retrieved_context = "\n\n".join(set(retrieved_chunks))  # Remove duplicates
 
-def extract_data_from_text(llm, text):
-    """Extract structured marketing data from text using the AI model."""
     prompt = f"""
-    Analyze the following document and extract:
+    Analyze the following relevant information extracted from a document and extract:
     - Brand description
     - Target audience
     - Products or services
@@ -17,7 +37,8 @@ def extract_data_from_text(llm, text):
 
     Use "Not specified" if information is missing.
 
-    Document: {text}
+    Relevant Information:
+    {retrieved_context if retrieved_context else text}
 
     Output as JSON:
     {{

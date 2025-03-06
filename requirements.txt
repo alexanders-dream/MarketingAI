@@ -6,5 +6,6 @@ streamlit
 python-dotenv
 PyPDF2
 python-docx
-chromadb
+chromadb==0.4.24
+sentence-transformers
 
