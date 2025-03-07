@@ -4,7 +4,7 @@ import streamlit as st
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.document_loaders import UnstructuredFileLoader
+from langchain_unstructured import UnstructuredLoader
 
 # Define working directory
 working_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,7 +20,7 @@ embeddings = get_embeddings()
 @st.cache_resource
 def get_knowledge_base(file_id, file_path):
     """Create FAISS knowledge base with marketing-specific settings"""
-    loader = UnstructuredFileLoader(file_path)
+    loader = UnstructuredLoader(file_path)
     documents = loader.load()
 
     text_splitter = CharacterTextSplitter(

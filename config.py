@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         }
     )
     RAG: Dict[str, Any] = {
-        "CHUNK_SIZE": 1500,
+        "CHUNK_SIZE": 10000,
         "CHUNK_OVERLAP": 300,
         "EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "TOP_K_RESULTS": 5

@@ -4,7 +4,7 @@ import streamlit as st
 from typing import Dict, Any
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
-from langchain_community.document_loaders import UnstructuredFileLoader
+from langchain_unstructured import UnstructuredLoader
 
 # Define prompt template for marketing data extraction
 logger = logging.getLogger(__name__)
@@ -56,8 +56,8 @@ def extract_data_from_text(llm, file_path, knowledge_base=None):
     """Extract structured marketing data using text-based parsing"""
     
     # Add debug logging
-    print(f"Raw extraction text:\n{text}")  # Remove after debugging
-    
+    #print(f"Raw extraction text:\n{text}")  # Remove after debugging
+
     # Define default result structure
     default_result = {
         "brand_description": "Not specified",
@@ -80,7 +80,7 @@ def extract_data_from_text(llm, file_path, knowledge_base=None):
             response = qa_chain.invoke({"query": "Extract marketing data"})
             result_text = response["result"]
         else:
-            loader = UnstructuredFileLoader(file_path)
+            loader = UnstructuredLoader(file_path)
             documents = loader.load()
             text = " ".join([doc.page_content for doc in documents])
             response = llm.invoke([{"role": "user", "content": qa_prompt.format(context=text)}])
