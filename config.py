@@ -1,48 +1,37 @@
-# config.py
 import os
-from dotenv import load_dotenv
+from pydantic import Field, ValidationError
+from pydantic_settings import BaseSettings
 from typing import Dict, Any
 
-load_dotenv()
-
-class AppConfig:
-    _instance = None
-    
-    def __new__(cls):
-        if not cls._instance:
-            cls._instance = super().__new__(cls)
-            cls._init_config()
-        return cls._instance
-    
-    @classmethod
-    def _init_config(cls):
-        cls.settings = {
-            "API_KEYS": {
-                "GROQ": os.getenv("GROQ_API_KEY"),
-                "OPENAI": os.getenv("OPENAI_API_KEY")
-            },
-            "RAG": {
-                "CHUNK_SIZE": 512,
-                "CHUNK_OVERLAP": 64,
-                "EMBEDDING_MODEL": "all-MiniLM-L6-v2",
-                "TOP_K_RESULTS": 3
-            },
-            "MODELS": {
-                "DEFAULT_GROQ": "mixtral-8x7b-32768",
-                "DEFAULT_OPENAI": "gpt-4-turbo"
-            }
+class Settings(BaseSettings):
+    API_KEYS: Dict[str, str] = Field(
+        default_factory=lambda: {
+            "GROQ": os.getenv("GROQ_API_KEY", ""),
+            "OPENAI": os.getenv("OPENAI_API_KEY", ""),
+            "PANDASAI": os.getenv("PANDAS_API_KEY", "")
         }
-    
-    @classmethod
-    def get(cls, key_path: str, default: Any = None) -> Any:
-        keys = key_path.split('.')
-        value = cls.settings
-        try:
-            for key in keys:
-                value = value[key]
-            return value
-        except KeyError:
-            return default
+    )
+    RAG: Dict[str, Any] = {
+        "CHUNK_SIZE": 1500,
+        "CHUNK_OVERLAP": 300,
+        "EMBEDDING_MODEL": "all-MiniLM-L6-v2",
+        "TOP_K_RESULTS": 5
+    }
+    MODELS: Dict[str, str] = {
+        "DEFAULT_GROQ": "mixtral-8x7b-32768",
+        "DEFAULT_OPENAI": "gpt-4-turbo"
+    }
+    TEMPERATURE: float = 0.7
+
+    class Config:
+        extra = 'allow'
+        env_file = '.env'
+        env_file_encoding = 'utf-8'
+
+try:
+    config = Settings()
+except ValidationError as e:
+    raise RuntimeError(f"Configuration error: {e}") from e
 
 def get_api_key(provider: str) -> str:
-    return AppConfig().get(f"API_KEYS.{provider.upper()}")
+    return config.API_KEYS.get(provider.upper(), "")

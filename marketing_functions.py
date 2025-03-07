@@ -1,8 +1,10 @@
 # marketing_functions.py
+from typing import Union
+from config import config
 
-
-def generate_strategy(llm, brand_description, target_audience):
+def generate_strategy(llm, brand_description, target_audience, temperature: Union[float, None] = None):
     """Generate a marketing strategy."""
+    temperature = temperature or config.TEMPERATURE
     prompt = f"""
     You are a seasoned marketing strategist with extensive experience in boosting brand visibility and customer engagement. Based on the details provided below, develop a comprehensive, multi-channel marketing strategy that includes:
     - Clear objectives and measurable KPIs
@@ -15,10 +17,11 @@ def generate_strategy(llm, brand_description, target_audience):
     
     Please present the strategy in a structured, step-by-step format.
     """
-    return llm.invoke([{"role": "user", "content": prompt}]).content
+    return llm.invoke([{"role": "user", "content": prompt, "temperature": temperature}]).content
 
-def generate_campaign(llm, product_service, goals):
+def generate_campaign(llm, product_service, goals, temperature: Union[float, None] = None):
     """Generate digital marketing campaign ideas."""
+    temperature = temperature or config.TEMPERATURE
     prompt = f"""
     As an experienced digital marketing specialist, design innovative campaign ideas for the following product/service. Your response should include:
     - A list of creative campaign concepts with brief descriptions
@@ -32,10 +35,11 @@ def generate_campaign(llm, product_service, goals):
     
     Provide your ideas in a clear and organized format.
     """
-    return llm.invoke([{"role": "user", "content": prompt}]).content
+    return llm.invoke([{"role": "user", "content": prompt, "temperature": temperature}]).content
 
-def generate_content(llm, platform, topic, tone, target_audience):
+def generate_content(llm, platform, topic, tone, target_audience, temperature: Union[float, None] = None):
     """Generate social media content."""
+    temperature = temperature or config.TEMPERATURE
     prompt = f"""
     You are a creative content strategist specialized in {platform}. Develop an engaging and original post centered on the topic "{topic}" using a {tone} tone. Ensure that your post:
     - Captures attention quickly and holds reader interest
@@ -46,10 +50,11 @@ def generate_content(llm, platform, topic, tone, target_audience):
     Please produce the content in a format that suits {platform}.
     Post:
     """
-    return llm.invoke([{"role": "user", "content": prompt}]).content
+    return llm.invoke([{"role": "user", "content": prompt, "temperature": temperature}]).content
 
-def optimize_seo(llm, content, keywords):
+def optimize_seo(llm, content, keywords, temperature: Union[float, None] = None):
     """Provide SEO optimization suggestions."""
+    temperature = temperature or config.TEMPERATURE
     prompt = f"""
     You are an expert SEO consultant. Analyze the content provided below and propose actionable recommendations to enhance its search engine performance. Focus on:
     - Integrating and positioning the following keywords effectively: {keywords}
@@ -61,4 +66,4 @@ def optimize_seo(llm, content, keywords):
     
     Please list your recommendations in a clear, step-by-step manner.
     """
-    return llm.invoke([{"role": "user", "content": prompt}]).content
+    return llm.invoke([{"role": "user", "content": prompt, "temperature": temperature }]).content

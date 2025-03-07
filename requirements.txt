@@ -13,4 +13,6 @@ faiss-gpu
 faiss-cpu
 unstructured
 unstructured[pdf]
+pydantic
+langchain-unstructured
 

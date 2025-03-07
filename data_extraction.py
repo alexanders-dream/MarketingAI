@@ -1,96 +1,63 @@
-# data_extraction.py
 import json
+import logging
 import streamlit as st
+from typing import Dict, Any
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 from langchain_community.document_loaders import UnstructuredFileLoader
 
 # Define prompt template for marketing data extraction
-# data_extraction.py
+logger = logging.getLogger(__name__)
+
+DEFAULT_RESULT = {
+    "brand_description": "Not specified",
+    "target_audience": "Not specified",
+    "products_services": [],
+    "marketing_goals": [],
+    "existing_content": [],
+    "keywords": [],
+    "suggested_topics": []
+}
+
 qa_prompt = PromptTemplate(
-    template="""
-    Analyze this document and extract SPECIFIC information using EXACTLY these headings:
+    template="""Extract marketing data as JSON with these EXACT keys:
+    {{
+        "brand_description": "string",
+        "target_audience": "string",
+        "products_services": ["string"],
+        "marketing_goals": ["string"],
+        "existing_content": ["string"],
+        "keywords": ["string"],
+        "suggested_topics": ["string"]
+    }}
+    Rules:
+    1. Use ONLY document content
+    2. Empty values = "Not specified"
+    3. Arrays minimum 3 items
+    4. Strict valid JSON format
     
-    Brand Description: [Describe the brand's core purpose]
-    Target Audience: [Who they serve - include demographics]
-    Products/Services: [List offerings with details]
-    Marketing Goals: [Clear objectives from the document]
-    Existing Content: [Types of content mentioned]
-    Keywords: [Important terms separated by commas]
-    Suggested Social Media Topics: [3-5 campaign ideas]
-
-    Document Content: {context}
-
-    RULES:
-    1. Use ONLY information from the document
-    2. Never invent information - use "Not specified" if missing
-    3. Maintain the exact heading format shown above
-    4. For lists, use bullet points with "-"
-    """,
+    Document: {context}""",
     input_variables=["context"]
 )
 
-def parse_extraction_text(text: str) -> dict:
-    """Parse the text response into structured data with flexible matching"""
-
-    # Add debug logging
-    print(f"Raw extraction text:\n{text}")  # Remove after debugging
-
-    result = {
-        "brand_description": "",
-        "target_audience": "",
-        "products_services": "",
-        "marketing_goals": "",
-        "existing_content": "",
-        "keywords": "",
-        "suggested_topics": []
-    }
-
-    section_map = {
-        "brand description": "brand_description",
-        "target audience": "target_audience",
-        "products/services": "products_services",
-        "marketing goals": "marketing_goals",
-        "existing content": "existing_content",
-        "keywords": "keywords",
-        "suggested social media topics": "suggested_topics"
-    }
-
-    current_section = None
-    lines = text.split('\n')
-
-    for line in lines:
-        line = line.strip().lower()
-        # Detect section headers
-        for section in section_map:
-            if line.startswith(section + ":"):
-                current_section = section_map[section]
-                value = line.split(":", 1)[-1].strip()
-                if value:
-                    result[current_section] = value.capitalize()
-                break
-        else:
-            # Handle content lines
-            if current_section:
-                if line.startswith("-"):
-                    clean_line = line[1:].strip()
-                    if current_section == "suggested_topics":
-                        result[current_section].append(clean_line.capitalize())
-                    else:
-                        result[current_section] += "\n" + clean_line.capitalize()
-                elif line:
-                    result[current_section] += " " + line.capitalize()
-
-    # Clean up results
-    result["suggested_topics"] = result["suggested_topics"][:5]  # Limit to 5 topics
-    for key in result:
-        if isinstance(result[key], str):
-            result[key] = result[key].replace("Not specified", "").strip() or "Not specified"
+def parse_extraction_text(text: str) -> Dict[str, Any]:
+    try:
+        clean_text = text.strip().replace("```json", "").replace("```", "")
+        data = json.loads(clean_text)
+        return {
+            **DEFAULT_RESULT,
+            **{k: v for k, v in data.items() if k in DEFAULT_RESULT}
+        }
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error(f"Parsing failed: {str(e)}")
+        return DEFAULT_RESULT
     
-    return result
-
 def extract_data_from_text(llm, file_path, knowledge_base=None):
     """Extract structured marketing data using text-based parsing"""
+    
+    # Add debug logging
+    print(f"Raw extraction text:\n{text}")  # Remove after debugging
+    
     # Define default result structure
     default_result = {
         "brand_description": "Not specified",

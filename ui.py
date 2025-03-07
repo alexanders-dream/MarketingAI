@@ -1,7 +1,6 @@
-# ui.py
 import streamlit as st
 import os
-from config import get_api_key
+from config import get_api_key, config
 from file_handling import extract_text_from_file
 from data_extraction import extract_data_from_text
 from marketing_functions import generate_strategy, generate_campaign, generate_content, optimize_seo
@@ -72,6 +71,13 @@ def setup_sidebar():
             key="provider_select",
             help="Select your preferred AI service provider"
         )
+
+        with st.expander("Model Settings", expanded=False):
+            st.session_state.temperature = st.slider(
+                "Creativity (Temperature)",
+                0.0, 1.0, config.TEMPERATURE,
+                help="Higher values = more creative, lower = more focused"
+            )
         
         with st.expander("Advanced Settings", expanded=False):
             default_endpoints = {
@@ -97,6 +103,7 @@ def setup_sidebar():
                 st.session_state.api_key = api_key
             else:
                 st.session_state.api_key = None
+                
 
         # Model selection with caching
         if provider == "Ollama" or st.session_state.get("api_key"):
@@ -129,13 +136,17 @@ def setup_sidebar():
 
 def initialize_llm():
     """Initialize the LLM client with current settings"""
+    
     provider = st.session_state.get("provider_select")
-    return ProviderHandler.create_client(
-        provider=provider,
-        model=st.session_state.get("model"),
-        api_key=st.session_state.get("api_key"),
-        endpoint=st.session_state.get("endpoint")
-    )
+    if st.session_state.get("api_key") == "":
+        st.info("Add a valid API key. Edit Advanced Settings")
+    else:
+        return ProviderHandler.create_client(
+            provider=provider,
+            model=st.session_state.get("model"),
+            api_key=st.session_state.get("api_key"),
+            endpoint=st.session_state.get("endpoint")
+        )
 
 def render_file_upload(use_rag):
     col1, col2 = st.columns([3, 1])
@@ -200,6 +211,7 @@ def render_file_upload(use_rag):
 
 def render_task_interface(llm, task):
     """Render the appropriate task interface"""
+    temperature = st.session_state.get("temperature", config.TEMPERATURE)
 
     if task not in ["Marketing Strategy", "Campaign Ideas", "Social Media Content", "SEO Optimization"]:
         st.error("Invalid task selection")
@@ -217,7 +229,7 @@ def render_task_interface(llm, task):
                 
                 if st.form_submit_button("🚀 Generate Strategy"):
                     with st.spinner("Crafting Strategy..."):
-                        result = generate_strategy(llm, brand, audience)
+                        result = generate_strategy(llm, brand, audience, temperature)
                         st.session_state.result = result
             
         elif task == "Campaign Ideas":
@@ -229,7 +241,7 @@ def render_task_interface(llm, task):
                 
                 if st.form_submit_button("🚀 Generate Campaign"):
                     with st.spinner("Crafting Campaign..."):
-                        result = generate_campaign(llm, product_service, goals)
+                        result = generate_campaign(llm, product_service, goals, temperature)
                         st.session_state.result = result
 
         elif task == "Social Media Content":
@@ -244,7 +256,7 @@ def render_task_interface(llm, task):
                 
                 if st.form_submit_button("🚀 Generate Content"):
                     with st.spinner("Crafting content..."):
-                        result = generate_content(llm, platform, topic, tone, target_audience)
+                        result = generate_content(llm, platform, topic, tone, target_audience, temperature)
                         st.session_state.result = result
         
         elif task == "SEO Optimization":
@@ -255,7 +267,7 @@ def render_task_interface(llm, task):
                 
                 if st.form_submit_button("🚀 Generate SEO strategy"):
                     with st.spinner("Crafting SEO strategy..."):
-                        result = optimize_seo(llm, content, keywords)
+                        result = optimize_seo(llm, content, keywords, temperature)
                         st.session_state.result = result
             pass
         
@@ -264,34 +276,3 @@ def render_task_interface(llm, task):
                 st.markdown(st.session_state.result)
                 st.download_button("💾 Download", st.session_state.result, f"{task.replace(' ', '_')}.md")
 
-def main():
-    
-    # Main header
-    st.title("Marketing Agent Pro")
-    st.markdown("---")
-    
-    # Setup sidebar and get selected task
-    task, use_rag = setup_sidebar()
-    
-    # Initialize LLM client
-    llm = initialize_llm()
-    
-    # Main content area
-    with st.container():
-        tab_analysis, tab_manual = st.tabs(["📄 Document Analysis", "✍️ Manual Input"])
-        
-        with tab_analysis:
-            render_file_upload(use_rag)
-        
-        with tab_manual:
-            st.info("Coming soon: Direct input without document upload")
-        
-        if 'extracted_data' in st.session_state:
-            with st.expander("Debug: Extracted Data"):
-                st.write(st.session_state.extracted_data)
-            render_task_interface(llm, task)
-        else:
-            st.info("✨ Upload a document or use manual input to get started")
-
-if __name__ == "__main__":
-    main()

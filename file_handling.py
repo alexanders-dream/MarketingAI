@@ -1,13 +1,27 @@
-# file_handling.py
+import magic
+from typing import Union
 from PyPDF2 import PdfReader
 from docx import Document
 import streamlit as st
 
-def validate_file(file):
-    if file.size > 5 * 1024 * 1024:  # 5MB
-        return False
-    return file.name.split('.')[-1] in ['pdf', 'docx', 'txt']
+ALLOWED_MIME_TYPES = {
+    "application/pdf": "pdf",
+    "text/plain": "txt",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx"
+}
 
+def validate_file(file) -> bool:
+    try:
+        file_type = magic.from_buffer(file.getvalue(), mime=True)
+        return (
+            file_type in ALLOWED_MIME_TYPES and
+            file.size <= 5 * 1024 * 1024
+        )
+    except Exception as e:
+        st.error(f"File validation error: {str(e)}")
+        return False
+
+# Rest of extraction functions remain similar
 def extract_text_from_file(uploaded_file):
     """Extract text from PDF, DOCX, or TXT files."""
     if uploaded_file.name.endswith('.pdf'):
