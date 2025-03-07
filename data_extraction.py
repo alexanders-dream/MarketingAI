@@ -1,32 +1,18 @@
 # data_extraction.py
 import json
 import streamlit as st
-from rag_utils import get_chroma_collection, retrieve_relevant_chunks
+from langchain.prompts import PromptTemplate
+from langchain.chains import RetrievalQA
+from langchain_community.document_loaders import UnstructuredFileLoader
 
-def extract_data_from_text(llm, text, file_id=None):
-    """Extract structured marketing data from text using RAG and the AI model."""
-    # If file_id is provided, use RAG to retrieve relevant chunks
-    retrieved_context = ""
-    if file_id:
-        collection = get_chroma_collection(file_id)
-        # Define queries for each data field to retrieve relevant chunks
-        queries = {
-            "brand_description": "What is the brand description?",
-            "target_audience": "Who is the target audience?",
-            "products_services": "What are the products or services?",
-            "marketing_goals": "What are the marketing goals?",
-            "existing_content": "What existing content is mentioned?",
-            "keywords": "What keywords are relevant?",
-            "suggested_topics": "What topics could be used for social media?"
-        }
-        retrieved_chunks = []
-        for field, query in queries.items():
-            chunks = retrieve_relevant_chunks(collection, query, n_results=2)
-            retrieved_chunks.extend(chunks)
-        retrieved_context = "\n\n".join(set(retrieved_chunks))  # Remove duplicates
+# Define prompt template for marketing data extraction
+qa_prompt = PromptTemplate(
+    template="""
+    Based on the document content below, extract the following marketing data:
 
-    prompt = f"""
-    Analyze the following relevant information extracted from a document and extract:
+    {context}
+
+    Extract:
     - Brand description
     - Target audience
     - Products or services
@@ -35,12 +21,7 @@ def extract_data_from_text(llm, text, file_id=None):
     - Keywords
     - Suggested topics for social media (3-5 topics)
 
-    Use "Not specified" if information is missing.
-
-    Relevant Information:
-    {retrieved_context if retrieved_context else text}
-
-    Output as JSON:
+    Use "Not specified" if information is missing. Provide the output in JSON format like this:
     {{
         "brand_description": "...",
         "target_audience": "...",
@@ -50,13 +31,51 @@ def extract_data_from_text(llm, text, file_id=None):
         "keywords": "...",
         "suggested_topics": ["...", "...", "..."]
     }}
-    """
-    try:
-        response = llm.invoke([{"role": "user", "content": prompt}])
-        return json.loads(response.content)
-    except json.JSONDecodeError:
-        st.error("Failed to parse extracted data.")
-        return {}
-    except Exception as e:
-        st.error(f"Error: {e}")
-        return {}
+
+    """,
+    input_variables=["context"]
+)
+
+def extract_data_from_text(llm, file_path, knowledge_base=None):
+    """Extract structured marketing data using RAG if enabled, otherwise use direct LLM invocation."""
+    if knowledge_base:
+        # Use RAG with RetrievalQA chain
+        qa_chain = RetrievalQA.from_chain_type(
+            llm=llm,
+            retriever=knowledge_base,
+            chain_type_kwargs={"prompt": qa_prompt}
+        )
+        response = qa_chain.invoke({"query": "marketing data extraction"})
+        try:
+            return json.loads(response["result"])
+        except json.JSONDecodeError:
+            st.error("Failed to parse RAG response as JSON.")
+            return {
+                "brand_description": "Not specified",
+                "target_audience": "Not specified",
+                "products_services": "Not specified",
+                "marketing_goals": "Not specified",
+                "existing_content": "Not specified",
+                "keywords": "Not specified",
+                "suggested_topics": []
+            }
+    else:
+        # Direct LLM invocation (fallback)
+        loader = UnstructuredFileLoader(file_path)
+        documents = loader.load()
+        text = " ".join([doc.page_content for doc in documents])
+        prompt = qa_prompt.format(context=text)
+        try:
+            response = llm.invoke([{"role": "user", "content": prompt}])
+            return json.loads(response.content)
+        except json.JSONDecodeError:
+            st.error("Failed to parse direct LLM response as JSON.")
+            return {
+                "brand_description": "Not specified",
+                "target_audience": "Not specified",
+                "products_services": "Not specified",
+                "marketing_goals": "Not specified",
+                "existing_content": "Not specified",
+                "keywords": "Not specified",
+                "suggested_topics": []
+            }

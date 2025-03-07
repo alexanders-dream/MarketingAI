@@ -1,6 +1,7 @@
 langchain 
 langchain-groq
 langchain-community
+langchain-huggingface
 requests
 streamlit 
 python-dotenv
@@ -8,4 +9,8 @@ PyPDF2
 python-docx
 chromadb==0.4.24
 sentence-transformers
+faiss-gpu
+faiss-cpu
+unstructured
+unstructured[pdf]
 

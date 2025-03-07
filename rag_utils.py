@@ -1,52 +1,36 @@
 # rag_utils.py
-import chromadb
-from sentence_transformers import SentenceTransformer
+import os
 import streamlit as st
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain.text_splitter import CharacterTextSplitter
+from langchain_community.document_loaders import UnstructuredFileLoader
+
+# Define working directory
+working_dir = os.path.dirname(os.path.abspath(__file__))
 
 @st.cache_resource
-def get_embedding_model():
-    return SentenceTransformer('all-MiniLM-L6-v2')
+def get_embeddings():
+    """Load and cache HuggingFace embeddings."""
+    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-embedding_model = get_embedding_model()
+embeddings = get_embeddings()
 
 @st.cache_resource
-def get_chroma_collection(file_id):
-    # Use EphemeralClient for in-memory storage, avoiding tenant issues
-    client = chromadb.EphemeralClient()
-    collection = client.create_collection(f"rag_{file_id}", get_or_create=True)
-    return collection
+def get_knowledge_base(file_id, file_path):
+    """Create and cache a FAISS-based knowledge base from the uploaded file."""
+    # Load the document
+    loader = UnstructuredFileLoader(file_path)
+    documents = loader.load()
 
-def split_text_into_chunks(text, chunk_size=500):
-    paragraphs = text.split('\n\n')
-    chunks = []
-    current_chunk = ""
-    for para in paragraphs:
-        if len(current_chunk) + len(para) < chunk_size:
-            current_chunk += para + "\n\n"
-        else:
-            chunks.append(current_chunk.strip())
-            current_chunk = para + "\n\n"
-    if current_chunk:
-        chunks.append(current_chunk.strip())
-    return chunks
-
-def embed_chunks(chunks):
-    return embedding_model.encode(chunks).tolist()
-
-def add_documents_to_collection(collection, chunks, embeddings):
-    existing_ids = collection.get()['ids']
-    if existing_ids:
-        collection.delete(ids=existing_ids)
-    collection.add(
-        documents=chunks,
-        embeddings=embeddings,
-        ids=[str(i) for i in range(len(chunks))]
+    # Split text into chunks
+    text_splitter = CharacterTextSplitter(
+        separator="\n",
+        chunk_size=1000,  # Adjusted for marketing documents
+        chunk_overlap=200
     )
+    text_chunks = text_splitter.split_documents(documents)
 
-def retrieve_relevant_chunks(collection, query, n_results=3):
-    query_embedding = embedding_model.encode([query]).tolist()
-    results = collection.query(
-        query_embeddings=query_embedding,
-        n_results=n_results
-    )
-    return results['documents'][0] if results['documents'] else []
+    # Create FAISS index
+    knowledge_base = FAISS.from_documents(text_chunks, embeddings)
+    return knowledge_base.as_retriever()

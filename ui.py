@@ -1,37 +1,63 @@
 # ui.py
 import streamlit as st
+import os
 from config import get_api_key
-from file_handling import extract_text_from_file, validate_file
+from file_handling import extract_text_from_file
 from data_extraction import extract_data_from_text
 from marketing_functions import generate_strategy, generate_campaign, generate_content, optimize_seo
 from utils import fetch_models, ProviderHandler
-from rag_utils import split_text_into_chunks, embed_chunks, get_chroma_collection, add_documents_to_collection
+from file_handling import validate_file
+from rag_utils import get_knowledge_base, working_dir
+from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatOllama
 
-st.set_page_config(
-    page_title="Marketing Agent Pro",
-    page_icon="📈",
-    layout="wide"
-)
-
+"""st.set_page_config(
+        page_title="Marketing Agent Pro",
+        page_icon="📈",
+        #layout="wide"
+    )"""
+  
 # Custom CSS injection
 st.markdown("""
 <style>
     .stTextInput label, .stTextArea label, .stSelectbox label { 
         font-weight: 600 !important;
-        color: #2c3e50 !important;
+        color: #ffffff !important;
     }
     .stAlert { 
         border-left: 4px solid #2ecc71;
         padding: 1rem;
-        background-color: #f8f9fa;
+        background-color: #2c3e50;
     }
     .card {
         padding: 1.5rem;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         margin: 1rem 0;
-        background: white;
+        background: grey;
     }
+    /* Enhanced card styling */
+    .stContainer {
+        background: #ffffff;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        padding: 1.5rem;
+        margin: 1rem 0;
+    }
+    
+    /* Better form spacing */
+    .stForm > div {
+        gap: 1.2rem !important;
+    }
+    
+    /* Progress indicators */
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+    .pulse { animation: pulse 1.5s infinite; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -72,9 +98,6 @@ def setup_sidebar():
             else:
                 st.session_state.api_key = None
 
-        # RAG toggle
-        use_rag = st.checkbox("Use RAG (Enhanced Extraction)", value=True, help="Retrieve relevant document sections for better results")
-
         # Model selection with caching
         if provider == "Ollama" or st.session_state.get("api_key"):
             with st.spinner("Loading models..."):
@@ -93,12 +116,15 @@ def setup_sidebar():
             st.session_state.model = model
             
         st.sidebar.markdown("---")
+        st.sidebar.title("🎯 Select Task")
         task = st.selectbox(
             "🎯 Select Task",
             ["Marketing Strategy", "Campaign Ideas", "Social Media Content", "SEO Optimization"],
             key="task_select"
         )
-        
+
+        use_rag = st.sidebar.checkbox("Use RAG (Enhanced Extraction)", value=True)
+       
     return task, use_rag
 
 def initialize_llm():
@@ -111,8 +137,7 @@ def initialize_llm():
         endpoint=st.session_state.get("endpoint")
     )
 
-def render_file_upload(use_rag):
-    """File upload section with validation and RAG processing"""
+def render_file_upload():
     col1, col2 = st.columns([3, 1])
     with col1:
         uploaded_file = st.file_uploader(
@@ -126,32 +151,36 @@ def render_file_upload(use_rag):
             st.error("Invalid file. Please check size and format.")
             return None
         
-        current_file_id = uploaded_file.name + str(uploaded_file.size)
-        if 'current_file_id' not in st.session_state or st.session_state.current_file_id != current_file_id:
+        # Save uploaded file temporarily
+        file_id = uploaded_file.name + str(uploaded_file.size)
+        file_path = os.path.join(working_dir, uploaded_file.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        if 'current_file_id' not in st.session_state or st.session_state.current_file_id != file_id:
             with st.status("🔍 Analyzing document...", expanded=True) as status:
                 try:
-                    st.write("Extracting text...")
-                    text = extract_text_from_file(uploaded_file)
+                    knowledge_base = None
+                    #if use_rag:
+                    st.write("Building knowledge base for RAG...")
+                    knowledge_base = get_knowledge_base(file_id, file_path)
                     
-                    if use_rag:
-                        st.write("Processing for RAG...")
-                        chunks = split_text_into_chunks(text)
-                        embeddings = embed_chunks(chunks)
-                        collection = get_chroma_collection(current_file_id)
-                        add_documents_to_collection(collection, chunks, embeddings)
-                    
-                    st.write("Identifying key elements...")
-                    llm = initialize_llm()
-                    extracted_data = extract_data_from_text(llm, text, file_id=current_file_id if use_rag else None)
+                    st.write("Extracting marketing data...")
+                    llm = initialize_llm()  # Your existing LLM initialization
+                    extracted_data = extract_data_from_text(llm, file_path, knowledge_base)
                     
                     st.session_state.extracted_data = extracted_data
-                    st.session_state.current_file_id = current_file_id
+                    st.session_state.current_file_id = file_id
                     status.update(label="Analysis complete!", state="complete", expanded=False)
                     
                 except Exception as e:
                     status.update(label="Analysis failed", state="error")
                     st.error(f"Error processing file: {str(e)}")
                     return None
+                finally:
+                    # Clean up temporary file
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
         else:
             st.success("✅ Using previously analyzed document")
             
@@ -170,7 +199,7 @@ def render_task_interface(llm, task):
                                       value=st.session_state.extracted_data.get("target_audience", ""))
                 
                 if st.form_submit_button("🚀 Generate Strategy"):
-                    with st.spinner("Crafting strategy..."):
+                    with st.spinner("Crafting Strategy..."):
                         result = generate_strategy(llm, brand, audience)
                         st.session_state.result = result
             
@@ -182,7 +211,7 @@ def render_task_interface(llm, task):
                                          value=st.session_state.extracted_data.get("marketing_goals", ""))
                 
                 if st.form_submit_button("🚀 Generate Campaign"):
-                    with st.spinner("Crafting campaign..."):
+                    with st.spinner("Crafting Campaign..."):
                         result = generate_campaign(llm, product_service, goals)
                         st.session_state.result = result
 
@@ -203,13 +232,15 @@ def render_task_interface(llm, task):
         
         elif task == "SEO Optimization":
             with st.form("seo_form"):
+                #content_source = st.radio("Content Source", ["Extracted", "Custom"])
                 content = st.text_area("Content", value=st.session_state.extracted_data.get("existing_content", ""))
                 keywords = st.text_input("Keywords (comma-separated)", value=st.session_state.extracted_data.get("keywords", ""))
                 
-                if st.form_submit_button("🚀 Optimize SEO"):
-                    with st.spinner("Optimizing SEO..."):
+                if st.form_submit_button("🚀 Generate SEO strategy"):
+                    with st.spinner("Crafting SEO strategy..."):
                         result = optimize_seo(llm, content, keywords)
                         st.session_state.result = result
+            pass
         
         if 'result' in st.session_state:
             with st.container(border=True):
@@ -217,17 +248,23 @@ def render_task_interface(llm, task):
                 st.download_button("💾 Download", st.session_state.result, f"{task.replace(' ', '_')}.md")
 
 def main():
-    #st.title("Marketing Agent Pro")
-   # st.markdown("---")
     
-    task, use_rag = setup_sidebar()
+    # Main header
+    st.title("Marketing Agent Pro")
+    st.markdown("---")
+    
+    # Setup sidebar and get selected task
+    task = setup_sidebar()
+    
+    # Initialize LLM client
     llm = initialize_llm()
     
+    # Main content area
     with st.container():
         tab_analysis, tab_manual = st.tabs(["📄 Document Analysis", "✍️ Manual Input"])
         
         with tab_analysis:
-            uploaded_file = render_file_upload(use_rag)
+            uploaded_file = render_file_upload()
         
         with tab_manual:
             st.info("Coming soon: Direct input without document upload")

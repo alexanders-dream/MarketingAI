@@ -1,5 +1,5 @@
 # main.py
-from uid import main
+from ui import main
 
 if __name__ == "__main__":
     main()
