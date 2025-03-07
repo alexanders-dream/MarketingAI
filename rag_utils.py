@@ -17,20 +17,27 @@ def get_embeddings():
 embeddings = get_embeddings()
 
 @st.cache_resource
+@st.cache_resource
 def get_knowledge_base(file_id, file_path):
-    """Create and cache a FAISS-based knowledge base from the uploaded file."""
-    # Load the document
+    """Create FAISS knowledge base with marketing-specific settings"""
     loader = UnstructuredFileLoader(file_path)
     documents = loader.load()
 
-    # Split text into chunks
     text_splitter = CharacterTextSplitter(
         separator="\n",
-        chunk_size=1000,  # Adjusted for marketing documents
-        chunk_overlap=200
+        chunk_size=1500,  # Increased for better context
+        chunk_overlap=300,
+        length_function=len
     )
     text_chunks = text_splitter.split_documents(documents)
 
-    # Create FAISS index
-    knowledge_base = FAISS.from_documents(text_chunks, embeddings)
-    return knowledge_base.as_retriever()
+    # Create embeddings with enhanced parameters
+    embeddings = HuggingFaceEmbeddings(
+        model_name="all-MiniLM-L6-v2",
+        model_kwargs={'device': 'cpu'},
+        encode_kwargs={'normalize_embeddings': True}
+    )
+
+    return FAISS.from_documents(text_chunks, embeddings).as_retriever(
+        search_kwargs={"k": 5}  # Return more relevant chunks
+    )

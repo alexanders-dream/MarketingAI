@@ -137,7 +137,7 @@ def initialize_llm():
         endpoint=st.session_state.get("endpoint")
     )
 
-def render_file_upload():
+def render_file_upload(use_rag):
     col1, col2 = st.columns([3, 1])
     with col1:
         uploaded_file = st.file_uploader(
@@ -161,17 +161,29 @@ def render_file_upload():
             with st.status("🔍 Analyzing document...", expanded=True) as status:
                 try:
                     knowledge_base = None
-                    #if use_rag:
-                    st.write("Building knowledge base for RAG...")
-                    knowledge_base = get_knowledge_base(file_id, file_path)
+                    if use_rag:
+                        st.write("Building knowledge base for RAG...")
+                        knowledge_base = get_knowledge_base(file_id, file_path)
                     
                     st.write("Extracting marketing data...")
                     llm = initialize_llm()  # Your existing LLM initialization
                     extracted_data = extract_data_from_text(llm, file_path, knowledge_base)
                     
-                    st.session_state.extracted_data = extracted_data
-                    st.session_state.current_file_id = file_id
-                    status.update(label="Analysis complete!", state="complete", expanded=False)
+                     # Initialize session state with proper structure
+                    st.session_state.extracted_data = {
+                        "brand_description": extracted_data.get("brand_description", ""),
+                        "target_audience": extracted_data.get("target_audience", ""),
+                        "products_services": extracted_data.get("products_services", ""),
+                        "marketing_goals": extracted_data.get("marketing_goals", ""),
+                        "existing_content": extracted_data.get("existing_content", ""),
+                        "keywords": extracted_data.get("keywords", ""),
+                        "suggested_topics": extracted_data.get("suggested_topics", [])
+                    }
+                    
+                    # Update UI fields directly
+                    for key in st.session_state.extracted_data:
+                        if key in st.session_state:
+                            st.session_state[key] = extracted_data.get(key, "")
                     
                 except Exception as e:
                     status.update(label="Analysis failed", state="error")
@@ -188,6 +200,11 @@ def render_file_upload():
 
 def render_task_interface(llm, task):
     """Render the appropriate task interface"""
+
+    if task not in ["Marketing Strategy", "Campaign Ideas", "Social Media Content", "SEO Optimization"]:
+        st.error("Invalid task selection")
+        return
+    
     with st.container():
         st.header(f"📋 {task}")
         
@@ -254,7 +271,7 @@ def main():
     st.markdown("---")
     
     # Setup sidebar and get selected task
-    task = setup_sidebar()
+    task, use_rag = setup_sidebar()
     
     # Initialize LLM client
     llm = initialize_llm()
@@ -264,12 +281,14 @@ def main():
         tab_analysis, tab_manual = st.tabs(["📄 Document Analysis", "✍️ Manual Input"])
         
         with tab_analysis:
-            uploaded_file = render_file_upload()
+            render_file_upload(use_rag)
         
         with tab_manual:
             st.info("Coming soon: Direct input without document upload")
         
         if 'extracted_data' in st.session_state:
+            with st.expander("Debug: Extracted Data"):
+                st.write(st.session_state.extracted_data)
             render_task_interface(llm, task)
         else:
             st.info("✨ Upload a document or use manual input to get started")
