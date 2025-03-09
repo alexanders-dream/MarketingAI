@@ -202,8 +202,8 @@ def create_sidebar() -> Dict[str, Any]:
             max_tokens = st.number_input(
                 "Max Tokens", 
                 min_value=512, 
-                max_value=4096, 
-                value=2048
+                max_value=8192, 
+                value=4096
             )
                         
         st.sidebar.markdown(
