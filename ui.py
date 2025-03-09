@@ -1,3 +1,4 @@
+# ui.py (optimized)
 import streamlit as st
 import os
 from config import get_api_key, config
@@ -10,55 +11,6 @@ from rag_utils import get_knowledge_base, working_dir
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatOllama
-
-"""st.set_page_config(
-        page_title="Marketing Agent Pro",
-        page_icon="📈",
-        #layout="wide"
-    )"""
-  
-# Custom CSS injection
-st.markdown("""
-<style>
-    .stTextInput label, .stTextArea label, .stSelectbox label { 
-        font-weight: 600 !important;
-        color: #ffffff !important;
-    }
-    .stAlert { 
-        border-left: 4px solid #2ecc71;
-        padding: 1rem;
-        background-color: #2c3e50;
-    }
-    .card {
-        padding: 1.5rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin: 1rem 0;
-        background: grey;
-    }
-    /* Enhanced card styling */
-    .stContainer {
-        background: #ffffff;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        padding: 1.5rem;
-        margin: 1rem 0;
-    }
-    
-    /* Better form spacing */
-    .stForm > div {
-        gap: 1.2rem !important;
-    }
-    
-    /* Progress indicators */
-    @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.5; }
-        100% { opacity: 1; }
-    }
-    .pulse { animation: pulse 1.5s infinite; }
-</style>
-""", unsafe_allow_html=True)
 
 def setup_sidebar():
     """Configure the sidebar with AI settings"""
@@ -104,13 +56,12 @@ def setup_sidebar():
             else:
                 st.session_state.api_key = None
                 
-
         # Model selection with caching
         if provider == "Ollama" or st.session_state.get("api_key"):
             with st.spinner("Loading models..."):
                 models = fetch_models(
                     provider,
-                    endpoint,
+                    st.session_state.get("endpoint"),
                     st.session_state.get("api_key")
                 )
                 
@@ -177,10 +128,10 @@ def render_file_upload(use_rag):
                         knowledge_base = get_knowledge_base(file_id, file_path)
                     
                     st.write("Extracting marketing data...")
-                    llm = initialize_llm()  # Your existing LLM initialization
+                    llm = initialize_llm()
                     extracted_data = extract_data_from_text(llm, file_path, knowledge_base)
                     
-                     # Initialize session state with proper structure
+                    # Initialize session state with proper structure
                     st.session_state.extracted_data = {
                         "brand_description": extracted_data.get("brand_description", ""),
                         "target_audience": extracted_data.get("target_audience", ""),
@@ -209,6 +160,7 @@ def render_file_upload(use_rag):
             
     return uploaded_file
 
+
 def render_task_interface(llm, task):
     """Render the appropriate task interface"""
     temperature = st.session_state.get("temperature", config.TEMPERATURE)
@@ -234,14 +186,14 @@ def render_task_interface(llm, task):
             
         elif task == "Campaign Ideas":
             with st.form("campaign_form"):
-                product_service = st.text_area("Products/Services", 
+                product_services = st.text_area("Products/Services", 
                                                value=st.session_state.extracted_data.get("products_services", ""))
                 goals = st.text_area("Marketing Goals", 
                                          value=st.session_state.extracted_data.get("marketing_goals", ""))
                 
                 if st.form_submit_button("🚀 Generate Campaign"):
                     with st.spinner("Crafting Campaign..."):
-                        result = generate_campaign(llm, product_service, goals, temperature)
+                        result = generate_campaign(llm, product_services, goals, temperature)
                         st.session_state.result = result
 
         elif task == "Social Media Content":
