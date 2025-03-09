@@ -738,7 +738,8 @@ def main():
     # File upload handling
     uploaded_file = st.file_uploader(
         "Upload business document (PDF, DOCX, TXT)", 
-        type=SUPPORTED_FILE_TYPES
+        type=SUPPORTED_FILE_TYPES,
+        help="add documents to help the AI understand you/your business"
     )
     
     if uploaded_file and validate_uploaded_file(uploaded_file):
