@@ -34,9 +34,9 @@ def fetch_models(provider, endpoint, api_key=None):
                 return []
             
     except Exception as e:
-        st.sidebar.error(f"Error fetching models: {str(e)}")
         st.sidebar.warning(f"By default, Ollama binds to 127.0. 0.1 , which restricts access to local connections only. To allow external access, you must set the OLLAMA_HOST variable to 0.0. 0.0 , enabling the server to accept connections from any IP address.")
-        return []
+        st.sidebar.error(f"Error fetching models: {str(e)}")
+        return None
         
     #return []
 
