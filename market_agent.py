@@ -119,6 +119,7 @@ def create_sidebar() -> Dict[str, Any]:
                 "OLLAMA": "http://localhost:11434"
             }
 
+    model = None
 
     with st.sidebar:
 
@@ -157,6 +158,7 @@ def create_sidebar() -> Dict[str, Any]:
             st.session_state.endpoint = endpoint
 
             api_key = None
+            
 
             if provider != "Ollama":
                 api_key = st.text_input(
@@ -166,8 +168,12 @@ def create_sidebar() -> Dict[str, Any]:
                     help=f"Get your API key from {provider}'s dashboard"
                 )
                 st.session_state.api_key = api_key
+                st.sidebar.markdown("[Get Groq API Key](https://console.groq.com/keys)")
             else:
                 st.session_state.api_key = None
+                
+                st.sidebar.markdown("[Download Ollama](https://ollama.com/)")
+                
                            
 
             # Model selection with caching
@@ -226,6 +232,7 @@ def initialize_llm(config: Dict[str, Any]) -> Optional[Union[ChatGroq, ChatOllam
         if config["provider"] == "Groq":
             if not config["api_key"]:
                 st.error("Groq API key is required")
+                st.info("[Get Groq API Key](https://console.groq.com/keys)")
                 return None
 
             return ChatGroq(
