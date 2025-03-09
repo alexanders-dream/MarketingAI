@@ -16,4 +16,4 @@ pydantic
 langchain-unstructured
 langchain-ollama
 langchain-huggingface
-
+docx2txt
