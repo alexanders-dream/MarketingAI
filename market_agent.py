@@ -31,9 +31,6 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Force CPU-only execution
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-os.environ["DEVICE"] = "cpu"
 
 # Constants
 MAX_FILE_SIZE_MB = 200  # 10MB maximum file size
@@ -273,22 +270,23 @@ def validate_uploaded_file(file: st.runtime.uploaded_file_manager.UploadedFile) 
 @st.cache_data(show_spinner="Processing document...")
 def process_document(_file: bytes, file_name: str) -> Tuple[Optional[FAISS], str]:
     """Process uploaded document and create vector store"""
-    temp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_name.split('.')[-1]}") as temp_file:
-            temp_file.write(_file)
-            temp_path = temp_file.name
-
-        # Document loading
+        # Read the file content directly from the bytes
         file_extension = file_name.split('.')[-1].lower()
-        loader = {
-            "pdf": PyPDFLoader,
-            "docx": Docx2txtLoader,
-            "doc": Docx2txtLoader,
-            "txt": TextLoader,
-            "md": TextLoader
-        }[file_extension](temp_path)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as temp_file:
+            temp_file.write(_file)
+            temp_path = temp_file.name  # Get the file path
         
+        if file_extension == 'pdf':
+            loader = PyPDFLoader(temp_path)
+        elif file_extension in ['docx', 'doc']:
+            loader = Docx2txtLoader(temp_path)
+        elif file_extension in ['txt', 'md']:
+            loader = TextLoader(temp_path)
+        else:
+            raise ValueError(f"Unsupported file type: {file_extension}")
+            
         documents = loader.load()
         doc_content = " ".join([doc.page_content for doc in documents])
 
@@ -303,16 +301,13 @@ def process_document(_file: bytes, file_name: str) -> Tuple[Optional[FAISS], str
         embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
         vector_store = FAISS.from_documents(splits, embeddings)
 
-        if temp_path and os.path.exists(temp_path):
-            os.unlink(temp_path)
         return vector_store, doc_content
 
     except Exception as e:
         logger.error(f"Document processing failed: {str(e)}")
         st.error(f"Document processing error: {str(e)}")
-        if temp_path and os.path.exists(temp_path):
-            os.unlink(temp_path)
         return None, ""
+
 
 def generate_insights(llm: Any, vector_store: FAISS, field_name: str) -> str:
     """Generate all marketing insights using RAG"""
