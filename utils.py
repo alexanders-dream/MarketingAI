@@ -6,33 +6,39 @@ from langchain_ollama import ChatOllama
 
 @st.cache_data
 def fetch_models(provider, endpoint, api_key=None):
-    if provider == "Groq":
-        url = f"{endpoint}/models"
-        headers = {"Authorization": f"Bearer {api_key}"}
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            return [model['id'] for model in response.json()['data']]
-        else:
-            return []
+    try:
+        if provider == "Groq":
+            url = f"{endpoint}/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                return [model['id'] for model in response.json()['data']]
+            else:
+                return []
+            
+        elif provider == "OpenAI":
+            url = f"{endpoint}/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                return [model['id'] for model in response.json()['data']]
+            else:
+                return []
+            
+        elif provider == "Ollama":
+            url = f"{endpoint}/api/tags"  # Ollama endpoint to list models
+            response = requests.get(url)
+            if response.status_code == 200:
+                return [model['name'] for model in response.json()['models']]
+            else:
+                return []
+            
+    except Exception as e:
+        st.sidebar.error(f"Error fetching models: {str(e)}")
+        st.sidebar.warning(f"By default, Ollama binds to 127.0. 0.1 , which restricts access to local connections only. To allow external access, you must set the OLLAMA_HOST variable to 0.0. 0.0 , enabling the server to accept connections from any IP address.")
+        return None
         
-    elif provider == "OpenAI":
-        url = f"{endpoint}/models"
-        headers = {"Authorization": f"Bearer {api_key}"}
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            return [model['id'] for model in response.json()['data']]
-        else:
-            return []
-        
-    elif provider == "Ollama":
-        url = f"{endpoint}/api/tags"  # Ollama endpoint to list models
-        response = requests.get(url)
-        if response.status_code == 200:
-            return [model['name'] for model in response.json()['models']]
-        else:
-            return []
-        
-    return []
+    #return []
 
 # utils.py
 class ProviderHandler:
