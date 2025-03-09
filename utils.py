@@ -2,8 +2,7 @@
 import requests
 import streamlit as st
 from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
-from langchain_community.chat_models import ChatOllama
+from langchain_ollama import ChatOllama
 
 @st.cache_data
 def fetch_models(provider, endpoint, api_key=None):
