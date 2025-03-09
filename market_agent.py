@@ -732,7 +732,7 @@ def main():
     st.session_state.llm = initialize_llm(config)
     
     # Main content area
-    st.title(f"📋 {config['task']} Generator")
+    st.title(f"📋 {config['task']} AI Generator")
     
     # File upload handling
     uploaded_file = st.file_uploader(
