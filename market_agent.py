@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
+# Force CPU-only execution
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ["DEVICE"] = "cpu"
+
 # Constants
 MAX_FILE_SIZE_MB = 200  # 10MB maximum file size
 SUPPORTED_FILE_TYPES = ["pdf", "docx", "txt", "md"]
