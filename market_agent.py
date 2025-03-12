@@ -44,9 +44,9 @@ class Config:
     MARKETING_TASKS = [
         "Marketing Strategy",
         "Campaign Ideas",
-        "Social Media Content",
-        "SEO Optimization",
-        "Copywriting"
+        "Social Media Content Strategy",
+        "SEO Optimization Strategy",
+        "Post Composer"
     ]
     
     API_KEYS = {
@@ -123,6 +123,30 @@ def create_sidebar() -> Dict[str, Any]:
     model = None
 
     with st.sidebar:
+        with st.expander("Unlock Extra Features", expanded=False):
+
+            st.markdown(
+                                """
+                                <div style="margin-left: 0px; margin-top: 20px;">
+                                    <a href="https://calendly.com/alexanderoguso/30min" target="_blank">
+                                        <div style="background-color: #33353d; padding: 15px 30px; border-radius: 8px; text-align: center; width: 250px; height: 54px; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease;">
+                                            <span style="color: white; font-weight: 600; font-size: 16px;">📞 Need more? Book a call</span>
+                                        </div>
+                                    </a>
+                                    <p style="color: #ffffff; font-weight: 600; margin-top: 5px; text-align: center;">Let's chat</p>
+                                </div>
+                                """, unsafe_allow_html=True
+                                )
+            
+            st.markdown(
+                                """<div style="text-align: center; margin-top: 20px;">
+                                    <a href="https://buymeacoffee.com/oguso">
+                                        <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="width: 150px; height: auto;">
+                                    </a>
+                                    <p style="color: #ffffff; margin-top: 5px;">Support my work!</p>
+                                </div>
+                                """, unsafe_allow_html=True
+                                )
 
         st.header("🎯 Marketing Task")
         task = st.selectbox(
@@ -206,15 +230,7 @@ def create_sidebar() -> Dict[str, Any]:
                 value=4096
             )
                         
-        st.sidebar.markdown(
-                            """<div style="text-align: center; margin-top: 20px;">
-                                <a href="https://buymeacoffee.com/oguso">
-                                    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="width: 150px; height: auto;">
-                                </a>
-                                <p style="color: #666; margin-top: 5px;">Support my work!</p>
-                            </div>
-                            """, unsafe_allow_html=True
-                            )
+        
         
     return {
         "provider": provider,
@@ -434,7 +450,7 @@ def create_marketing_form() -> Dict[str, str]:
 
         
 
-        st.subheader("Media Communication")
+        st.subheader("Media Communication: Post Composer")
         # Convert suggested_topics to a list of options
         suggested_topics = st.session_state.get("suggested_topics", "")
         topics_list = re.split(r'\d+\.\s*', suggested_topics.strip())
