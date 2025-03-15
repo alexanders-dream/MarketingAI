@@ -43,7 +43,7 @@ class Config:
     """Application configuration constants"""
     MARKETING_TASKS = [
         "Marketing Strategy",
-        "Campaign Ideas",
+        "Campaign Strategy",
         "Social Media Content Strategy",
         "SEO Optimization Strategy",
         "Post Composer"
@@ -525,7 +525,7 @@ def generate_output(llm: Any, task: str, form_data: Dict[str, str]) -> str:
         10. Risk Assessment & Contingency Plans
     """,
     
-    "Campaign Ideas": """
+    "Campaign Strategy": """
         You are a creative campaign director tasked with developing innovative marketing campaigns.
         
         ## Business Context
