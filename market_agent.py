@@ -555,7 +555,7 @@ def generate_output(llm: Any, task: str, form_data: Dict[str, str]) -> str:
         * Estimated Impact: Expected outcomes tied to marketing goals
     """,
     
-    "Social Media Content": """
+    "Social Media Content Strategy": """
         You are an expert social media manager creating platform-specific content.
         
         ## Business Context
@@ -603,7 +603,7 @@ def generate_output(llm: Any, task: str, form_data: Dict[str, str]) -> str:
            * Benchmarks for success
     """,
     
-    "SEO Optimization": """
+    "SEO Optimization Strategy": """
         You are an SEO specialist developing a comprehensive search optimization strategy.
         
         ## Business Context
@@ -657,7 +657,7 @@ def generate_output(llm: Any, task: str, form_data: Dict[str, str]) -> str:
            * Reporting Schedule and Format
         """,
 
-    "Copywriting": """
+    "Post Composer": """
         You are a professional copywriter creating compelling {post_type} content.
         
         ## Business Context
