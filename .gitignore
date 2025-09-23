@@ -1,1 +1,15 @@
+# Environment variables
 .env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Database file
+marketing_ai.db
+
+# VSCode settings
+.vscode/
+
+# Streamlit secrets
+.streamlit/secrets.toml
