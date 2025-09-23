@@ -1,9 +1,11 @@
-langchain 
+langchain
 langchain-groq
 langchain-community
 langchain-huggingface
+langchain-openai
+langchain-google-genai
 requests
-streamlit 
+streamlit
 python-dotenv
 PyPDF2
 python-docx
@@ -17,3 +19,6 @@ langchain-unstructured
 langchain-ollama
 langchain-huggingface
 docx2txt
+crawl4ai
+google-generativeai
+pillow
