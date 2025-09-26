@@ -193,7 +193,7 @@ class ContentGenerator:
                 ## Instructions
                 Create high-converting {post_type} copy that speaks directly to the target audience.
                 Maintain a {tone} tone throughout while incorporating strategic keywords {keywords} naturally.
-                The copy should directly support the stated marketing goals and the selected topics {suggested_topics}.
+                The copy should directly support the stated marketing goals and focus specifically on the topic: {selected_topic}.
 
                 ## Platform-Specific Guidelines
                 ### Instagram:
@@ -291,89 +291,79 @@ class ContentGenerator:
             """
         }
 
-    def generate_content(self, llm, task: str, form_data: Dict[str, str]) -> str:
+    def generate_content(self, llm, task: str, context: Dict[str, Any]) -> str:
         """
-        Generate content for a specific marketing task
+        Generate content for a specific marketing task using business context.
 
         Args:
-            llm: Language model instance
-            task: Marketing task type
-            form_data: Form data with business context
+            llm: Language model instance.
+            task: The marketing task to perform.
+            context: The business context data.
 
         Returns:
-            Generated content
+            The generated content as a string.
         """
         if task not in self.content_templates:
+            logger.error(f"Unknown task type: {task}")
             raise ValueError(f"Unknown task type: {task}")
 
         try:
-            # Create the prompt
-            prompt = ChatPromptTemplate.from_template(self.content_templates[task])
-
-            # Create the chain
+            prompt_template = self.content_templates[task]
+            prompt = ChatPromptTemplate.from_template(prompt_template)
+            
+            # Ensure all required variables are present in context
+            enhanced_context = context.copy()
+            
+            # Add default suggested_topics if missing
+            if "suggested_topics" not in enhanced_context or not enhanced_context["suggested_topics"]:
+                enhanced_context["suggested_topics"] = self._generate_suggested_topics(enhanced_context)
+            
             chain = prompt | llm | StrOutputParser()
-
-            # Execute the chain
-            response = chain.invoke(form_data)
-
+            response = chain.invoke(enhanced_context)
+            
             return response
 
         except Exception as e:
             logger.error(f"Content generation failed for task {task}: {str(e)}")
             return f"Error generating content: {str(e)}"
 
-    def enhance_content_with_market_data(self, llm, base_content: str,
-                                       market_analysis: Dict[str, str],
-                                       enhancement_type: str = "comprehensive") -> str:
-        """
-        Enhance existing content with market analysis insights
-
-        Args:
-            llm: Language model instance
-            base_content: Original content to enhance
-            market_analysis: Market analysis data
-            enhancement_type: Type of enhancement (comprehensive, targeted, etc.)
-
-        Returns:
-            Enhanced content
-        """
-        enhancement_prompt = f"""
-        You are a content strategist tasked with enhancing marketing content using market intelligence.
-
-        ## Original Content
-        {base_content}
-
-        ## Market Analysis Context
-        Brand Description: {market_analysis.get('brand_description', '')}
-        Target Audience: {market_analysis.get('target_audience', '')}
-        Competitive Advantages: {market_analysis.get('competitive_advantages', '')}
-        Market Opportunities: {market_analysis.get('market_opportunities', '')}
-        Customer Pain Points: {market_analysis.get('customer_pain_points', '')}
-        Keywords: {market_analysis.get('keywords', '')}
-
-        ## Enhancement Instructions
-        Enhance the original content by:
-        1. Incorporating relevant market insights naturally
-        2. Strengthening value propositions with competitive advantages
-        3. Addressing customer pain points more effectively
-        4. Optimizing keyword integration for better SEO
-        5. Making the content more targeted to the specific audience
-        6. Adding data-driven credibility where appropriate
-
-        Maintain the original content's structure and tone while making it more compelling and conversion-focused.
-        Do not change the fundamental message or call-to-action - enhance and strengthen it.
-
-        ## Enhanced Content
-        """
-
-        try:
-            prompt = ChatPromptTemplate.from_template(enhancement_prompt)
-            chain = prompt | llm | StrOutputParser()
-            return chain.invoke({})
-
-        except Exception as e:
-            logger.error(f"Content enhancement failed: {str(e)}")
-            return base_content  # Return original content if enhancement fails
+    def _generate_suggested_topics(self, context: Dict[str, Any]) -> str:
+        """Generate suggested topics based on business context"""
+        company_name = context.get("company_name", "the business")
+        industry = context.get("industry", "")
+        products_services = context.get("products_services", "")
+        target_audience = context.get("target_audience", "")
+        marketing_goals = context.get("marketing_goals", "")
+        
+        # Generate basic topics based on available context
+        topics = []
+        
+        if industry:
+            topics.append(f"{industry} trends and insights")
+            topics.append(f"Future of {industry}")
+        
+        if products_services:
+            topics.append(f"Benefits of {products_services}")
+            topics.append(f"How {products_services} solve customer problems")
+        
+        if target_audience:
+            topics.append(f"Understanding {target_audience} needs")
+            topics.append(f"What {target_audience} cares about")
+        
+        if marketing_goals:
+            topics.append(f"Achieving {marketing_goals}")
+        
+        # Add some general marketing topics
+        topics.extend([
+            f"{company_name} success stories",
+            "Customer testimonials and case studies",
+            "Industry best practices",
+            "Thought leadership content",
+            "Behind the scenes at the company"
+        ])
+        
+        # Return the first 5-7 topics
+        return ", ".join(topics[:7])
 
 
 class ContentPerformanceScorer:

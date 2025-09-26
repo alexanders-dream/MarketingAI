@@ -22,6 +22,12 @@ class DatabaseManager:
             cursor.execute(DatabaseConfig.PROJECTS_SCHEMA)
             cursor.execute(DatabaseConfig.CONTENT_SCHEMA)
             cursor.execute(DatabaseConfig.USER_PREFERENCES_SCHEMA)
+            cursor.execute(DatabaseConfig.CONTEXT_VERSIONS_SCHEMA)
+
+            # Add indexes for performance
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_project_id ON generated_content (project_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_context_project_id ON context_versions (project_id)")
+            
             conn.commit()
 
     def create_project(self, name: str, description: str = "") -> int:
@@ -146,16 +152,25 @@ class DatabaseManager:
                 """, (project_id,))
 
             rows = cursor.fetchall()
-            return [
-                {
+            results = []
+            for row in rows:
+                metadata = None
+                if row[3]:  # metadata field
+                    try:
+                        metadata = json.loads(row[3])
+                    except (json.JSONDecodeError, TypeError):
+                        # Handle invalid JSON gracefully
+                        metadata = {"error": "Invalid metadata format", "raw_data": row[3]}
+                
+                results.append({
                     "id": row[0],
                     "task_type": row[1],
                     "content": row[2],
-                    "metadata": json.loads(row[3]) if row[3] else None,
+                    "metadata": metadata,
                     "created_at": row[4]
-                }
-                for row in rows
-            ]
+                })
+            
+            return results
 
     def get_user_preference(self, key: str, user_id: str = "default") -> Optional[str]:
         """Get a user preference"""
@@ -192,14 +207,72 @@ class DatabaseManager:
             """, (limit,))
 
             rows = cursor.fetchall()
-            return [
-                {
+            results = []
+            for row in rows:
+                metadata = None
+                if row[3]:  # metadata field
+                    try:
+                        metadata = json.loads(row[3])
+                    except (json.JSONDecodeError, TypeError):
+                        # Handle invalid JSON gracefully
+                        metadata = {"error": "Invalid metadata format", "raw_data": row[3]}
+                
+                results.append({
                     "id": row[0],
                     "task_type": row[1],
                     "content": row[2],
-                    "metadata": json.loads(row[3]) if row[3] else None,
+                    "metadata": metadata,
                     "created_at": row[4],
                     "project_name": row[5]
+                })
+            
+            return results
+
+    # Context Versioning Methods
+    def save_context_version(self, project_id: int, context: Dict[str, Any], source_type: str = "manual") -> int:
+        """Save a version of business context"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            context_json = json.dumps(context, default=str)
+            cursor.execute(
+                "INSERT INTO context_versions (project_id, context_json, source_type) VALUES (?, ?, ?)",
+                (project_id, context_json, source_type)
+            )
+            version_id = cursor.lastrowid
+            conn.commit()
+            return version_id
+
+    def get_all_context_versions(self, project_id: int) -> List[Dict[str, Any]]:
+        """Get all context versions for a project"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, context_json, source_type, created_at
+                FROM context_versions
+                WHERE project_id = ?
+                ORDER BY created_at DESC
+            """, (project_id,))
+            rows = cursor.fetchall()
+            
+            return [
+                {
+                    "version_id": row[0],
+                    "context": json.loads(row[1]) if row[1] else {},
+                    "source_type": row[2],
+                    "created_at": row[3]
                 }
                 for row in rows
             ]
+
+    def get_latest_context(self, project_id: int) -> Optional[Dict[str, Any]]:
+        """Get the latest context version for a project"""
+        versions = self.get_all_context_versions(project_id)
+        return versions[0]["context"] if versions else None
+
+    def delete_context_versions(self, project_id: int) -> bool:
+        """Delete all context versions for a project"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM context_versions WHERE project_id = ?", (project_id,))
+            conn.commit()
+            return cursor.rowcount > 0

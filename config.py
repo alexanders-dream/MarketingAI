@@ -98,3 +98,30 @@ class DatabaseConfig:
         UNIQUE(user_id, key)
     )
     """
+
+    CONTEXT_VERSIONS_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS context_versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL,
+        context_json TEXT NOT NULL,
+        source_type TEXT DEFAULT 'manual',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects (id)
+    )
+    """
+
+    # Business Context Schema
+    BUSINESS_CONTEXT_FIELDS = [
+        ("company_name", "Company Name", True),
+        ("industry", "Industry", True),
+        ("target_audience", "Target Audience", True),
+        ("products_services", "Products/Services", True),
+        ("brand_description", "Brand Description", True),
+        ("marketing_goals", "Marketing Goals", True),
+        ("existing_content", "Existing Content", False),
+        ("keywords", "SEO Keywords", False),
+        ("market_opportunities", "Market Opportunities", False),
+        ("competitive_advantages", "Competitive Advantages", False),
+        ("customer_pain_points", "Customer Pain Points", False),
+        ("suggested_topics", "Suggested Topics", False),
+    ]
