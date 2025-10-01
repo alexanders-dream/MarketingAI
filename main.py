@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any
 
 from config import AppConfig
-from database import DatabaseManager
+from session_manager import SessionManager
 from llm_handler import LLMManager
 from ui_components import SidebarManager, ProjectManager, BusinessContextManager, ContentDisplay
 from market_intelligence_ui import MarketIntelligenceDashboard, MarketAnalysisWizard
@@ -23,12 +23,12 @@ class MarketingAIApp:
     
     def __init__(self):
         self.app_config = AppConfig()
-        self.db = DatabaseManager()
+        self.session_manager = SessionManager()
         self.llm_manager = LLMManager()
         
         # Initialize UI components
-        self.sidebar_manager = SidebarManager()
-        self.project_manager = ProjectManager(self.db)
+        self.sidebar_manager = SidebarManager(self.session_manager)
+        self.project_manager = ProjectManager(self.session_manager)
         self.content_display = ContentDisplay()
         self.content_generator = ContentGenerator()
         
@@ -38,9 +38,11 @@ class MarketingAIApp:
     def _initialize_session_state(self):
         """Initialize centralized session state"""
         if "initialized" not in st.session_state:
+            # Create a default project when the session starts
+            project_id = self.session_manager.create_project("Default Project")
             st.session_state.update({
                 "initialized": True,
-                "current_project_id": None,
+                "current_project_id": project_id,
                 "current_step": 0,
                 "business_context": {},
                 "market_analysis_results": None,
@@ -74,9 +76,6 @@ class MarketingAIApp:
         # Main header
         st.title("🎯 Marketing AI Assistant")
         st.markdown("*Comprehensive AI-powered marketing content generation with market intelligence*")
-        
-        # Project management
-        self._handle_project_management()
         
         # Main workflow
         self._handle_main_workflow(llm_client, config)
@@ -129,29 +128,6 @@ class MarketingAIApp:
         except Exception:
             return False
 
-    def _handle_project_management(self):
-        """Handle project selection and creation"""
-        st.header("📁 Project Management")
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            project_id = self.project_manager.create_project_selector()
-        
-        with col2:
-            new_project_id = self.project_manager.create_project_form()
-        
-        # Set current project
-        current_project_id = project_id or new_project_id
-        if current_project_id:
-            st.session_state.current_project_id = current_project_id
-            self.project_manager.show_project_info(current_project_id)
-        else:
-            st.info("👆 Please select or create a project to continue")
-            return False
-        
-        return True
-
     def _handle_main_workflow(self, llm_client, config):
         """Handle the main 3-step workflow"""
         if not st.session_state.get("current_project_id"):
@@ -186,7 +162,7 @@ class MarketingAIApp:
         st.markdown("---")
         
         # Initialize Business Context Manager
-        bcm = BusinessContextManager(self.db)
+        bcm = BusinessContextManager(self.session_manager)
         bcm.display_context_manager(llm_client)
         
         # Navigation helper
@@ -299,7 +275,7 @@ class MarketingAIApp:
                             task,
                             st.session_state.current_project_id
                         )
-                        self.db.save_content(
+                        self.session_manager.save_content(
                             st.session_state.current_project_id,
                             task,
                             generated_content,

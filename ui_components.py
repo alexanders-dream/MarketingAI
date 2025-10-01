@@ -12,9 +12,9 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 from datetime import datetime
 
-from config import AppConfig, DatabaseConfig
+from config import AppConfig
 from llm_handler import LLMProviderHandler
-from database import DatabaseManager
+from session_manager import SessionManager
 from document_processor import DocumentProcessor
 from web_scraper import WebScraper
 from prompts import Prompts
@@ -298,7 +298,8 @@ def convert_to_docx(content: str) -> bytes:
 class SidebarManager:
     """Manages the application sidebar"""
 
-    def __init__(self):
+    def __init__(self, session_manager: SessionManager):
+        self.session_manager = session_manager
         self.llm_manager = None
 
     def create_sidebar(self) -> Dict[str, Any]:
@@ -307,6 +308,8 @@ class SidebarManager:
 
         with st.sidebar:
             self._create_upgrade_section()
+            
+            self._create_data_download_section()
 
             st.header("🎯 Marketing Task")
             task = st.selectbox(
@@ -492,16 +495,41 @@ class SidebarManager:
                 """, unsafe_allow_html=True
             )
 
+    def _create_data_download_section(self):
+        """Creates a section for downloading session data."""
+        st.header("📥 Download Your Data")
+        st.info("Download all your projects and content from this session.")
+        
+        all_data = self.session_manager.get_all_data()
+        
+        # Convert datetime objects to strings for JSON serialization
+        def convert_datetime(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+        try:
+            json_data = json.dumps(all_data, indent=4, default=convert_datetime)
+            
+            st.download_button(
+                label="Download Data as JSON",
+                data=json_data,
+                file_name=f"marketing_ai_session_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+            )
+        except Exception as e:
+            st.error(f"Error preparing data for download: {e}")
+
 
 class ProjectManager:
     """Manages project-related UI components"""
 
-    def __init__(self, db_manager: DatabaseManager):
-        self.db = db_manager
+    def __init__(self, session_manager: SessionManager):
+        self.session_manager = session_manager
 
-    def create_project_selector(self) -> Optional[int]:
+    def create_project_selector(self) -> Optional[str]:
         """Create project selection dropdown"""
-        projects = self.db.get_projects()
+        projects = self.session_manager.get_projects()
 
         if not projects:
             st.info("No projects found. Create your first project below.")
@@ -520,7 +548,7 @@ class ProjectManager:
 
         return None
 
-    def create_project_form(self) -> Optional[int]:
+    def create_project_form(self) -> Optional[str]:
         """Create new project form"""
         with st.expander("Create New Project", expanded=False):
             with st.form("new_project_form"):
@@ -538,7 +566,7 @@ class ProjectManager:
 
                 if st.form_submit_button("Create Project"):
                     if project_name.strip():
-                        project_id = self.db.create_project(
+                        project_id = self.session_manager.create_project(
                             project_name.strip(),
                             project_description.strip()
                         )
@@ -550,9 +578,9 @@ class ProjectManager:
 
         return None
 
-    def show_project_info(self, project_id: int):
+    def show_project_info(self, project_id: str):
         """Display project information"""
-        project = self.db.get_project(project_id)
+        project = self.session_manager.get_project(project_id)
         if project:
             col1, col2, col3 = st.columns(3)
 
@@ -560,7 +588,7 @@ class ProjectManager:
                 st.metric("Project", project["name"])
 
             with col2:
-                content_count = len(self.db.get_project_content(project_id))
+                content_count = len(self.session_manager.get_project_content(project_id))
                 st.metric("Content Pieces", content_count)
 
             with col3:
@@ -606,7 +634,7 @@ class ContentDisplay:
     """Handles content display and export"""
 
     @staticmethod
-    def show_generated_content(content: str, task_type: str, project_id: Optional[int] = None):
+    def show_generated_content(content: str, task_type: str, project_id: Optional[str] = None):
         """Display generated content with export options"""
         st.subheader("Generated Content")
         st.markdown(content)
@@ -684,9 +712,9 @@ class ContentDisplay:
 class BusinessContextManager:
     """Unified business context management with versioning and multi-source import"""
     
-    def __init__(self, db: DatabaseManager):
-        self.db = db
-        self.fields = DatabaseConfig.BUSINESS_CONTEXT_FIELDS
+    def __init__(self, session_manager: SessionManager):
+        self.session_manager = session_manager
+        self.fields = AppConfig.BUSINESS_CONTEXT_FIELDS
         self.doc_processor = DocumentProcessor()
         self.web_scraper = WebScraper()
         self.prompts = Prompts()
@@ -707,7 +735,7 @@ class BusinessContextManager:
             
         # Load latest context if not already loaded
         if not st.session_state.business_context:
-            latest_context = self.db.get_latest_context(project_id)
+            latest_context = self.session_manager.get_latest_context(project_id)
             if latest_context:
                 st.session_state.business_context = latest_context
                 st.success("✅ Loaded existing business context")
@@ -971,7 +999,7 @@ class BusinessContextManager:
                 st.success("✅ Context version saved!")
         
         with col2:
-            versions = self.db.get_all_context_versions(project_id)
+            versions = self.session_manager.get_all_context_versions(project_id)
             if versions:
                 version_options = [
                     f"v{v['version_id']} - {v['source_type']} ({v['created_at'][:16]})"
@@ -985,8 +1013,8 @@ class BusinessContextManager:
                 )
                 
                 if st.button("🔄 Load Version"):
-                    version_id = int(selected_version_str.split(" ")[0][1:])
-                    selected_context = next((v['context'] for v in versions if v['version_id'] == version_id), None)
+                    version_id_str = selected_version_str.split(" ")[0][1:]
+                    selected_context = next((v['context'] for v in versions if v['version_id'] == version_id_str), None)
                     if selected_context:
                         st.session_state.business_context = selected_context
                         st.success("✅ Previous version loaded!")
@@ -1053,7 +1081,7 @@ class BusinessContextManager:
         """Save current context as a new version"""
         project_id = st.session_state.get("current_project_id")
         if project_id and st.session_state.business_context:
-            self.db.save_context_version(
+            self.session_manager.save_context_version(
                 project_id, 
                 st.session_state.business_context, 
                 source_type

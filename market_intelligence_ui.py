@@ -269,7 +269,7 @@ class MarketIntelligenceDashboard:
         """Display export options for the analysis"""
         st.subheader("📤 Export Options")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         
         with col1:
             if st.button("📄 Export to PDF"):
@@ -278,34 +278,6 @@ class MarketIntelligenceDashboard:
         with col2:
             if st.button("📊 Export Charts"):
                 st.info("Chart export functionality would be implemented here")
-        
-        with col3:
-            if st.button("📋 Copy Summary"):
-                summary = self._generate_summary_text(analysis_data)
-                st.code(summary)
-                st.success("Summary copied to clipboard!")
-    
-    def _generate_summary_text(self, analysis_data: Dict[str, str]) -> str:
-        """Generate a text summary of the analysis"""
-        summary = f"""
-Market Intelligence Summary
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-
-Company: {analysis_data.get('company_name', 'N/A')}
-Industry: {analysis_data.get('industry', 'N/A')}
-Target Audience: {analysis_data.get('target_audience', 'N/A')}
-
-Key Findings:
-- Market Trends: {analysis_data.get('market_trends', 'N/A')[:200]}...
-- Opportunities: {analysis_data.get('market_opportunities', 'N/A')[:200]}...
-- Competitive Position: {analysis_data.get('competitive_advantages', 'N/A')[:200]}...
-
-Recommended Actions:
-1. Focus on identified market opportunities
-2. Leverage competitive advantages
-3. Monitor market trends for strategic positioning
-"""
-        return summary.strip()
 
 
 class MarketAnalysisWizard:
