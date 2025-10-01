@@ -2,15 +2,266 @@
 Reusable UI components for Marketing AI v3
 """
 import streamlit as st
+import pandas as pd
+import asyncio
+import json
 from typing import Dict, Any, Optional, List, Tuple
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
+from datetime import datetime
 
 from config import AppConfig
 from llm_handler import LLMProviderHandler
-from database import DatabaseManager
+from session_manager import SessionManager
+from document_processor import DocumentProcessor
+from web_scraper import WebScraper
+from prompts import Prompts
+import re
+
+
+def extract_json_from_text(text: Any) -> Dict[str, Any]:
+    """
+    Extract JSON object from LLM response text using robust parsing with fallbacks.
+    Handles cases where JSON is embedded in other text or has formatting issues.
+    Also maps field names to ensure consistency.
+    """
+    # Handle various input types gracefully
+    if not text:
+        return {}
+    
+    # Convert to string if it's not already
+    if not isinstance(text, str):
+        try:
+            text = str(text)
+        except:
+            return {}
+    
+    # Clean the text first - remove markdown code blocks and extra whitespace
+    cleaned_text = text.strip()
+    
+    # Remove markdown code blocks if present
+    if cleaned_text.startswith('```'):
+        lines = cleaned_text.split('\n')
+        if len(lines) > 2 and lines[0].startswith('```') and lines[-1].startswith('```'):
+            cleaned_text = '\n'.join(lines[1:-1]).strip()
+    
+    # Try direct parsing first with comprehensive error handling
+    try:
+        parsed_data = json.loads(cleaned_text)
+        return map_field_names(parsed_data)
+    except json.JSONDecodeError as e:
+        # Log the error but continue with fallback methods
+        pass
+    
+    # Enhanced JSON extraction with multiple fallback strategies
+    extraction_attempts = [
+        _extract_json_using_brackets,
+        _extract_json_using_regex,
+        _extract_json_using_llm_fallback
+    ]
+    
+    for extraction_method in extraction_attempts:
+        try:
+            result = extraction_method(cleaned_text)
+            if result:
+                return map_field_names(result)
+        except (json.JSONDecodeError, ValueError):
+            continue
+    
+    # Final fallback: try to extract any JSON-like structure
+    try:
+        # Look for the first { and last } in the text with better error handling
+        start_idx = cleaned_text.find('{')
+        end_idx = cleaned_text.rfind('}')
+        
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            json_str = cleaned_text[start_idx:end_idx+1]
+            # Try to fix common JSON issues
+            json_str = _fix_common_json_issues(json_str)
+            parsed_data = json.loads(json_str)
+            return map_field_names(parsed_data)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    
+    # If no valid JSON found, provide helpful error message
+    st.error("❌ Could not parse AI response as valid JSON. The AI may have returned malformed output.")
+    st.info("💡 Try rephrasing your prompt or asking the AI to format the response as pure JSON.")
+    return {}
+
+
+def _extract_json_using_brackets(text: str) -> Dict[str, Any]:
+    """Extract JSON using bracket matching with validation"""
+    stack = []
+    start_idx = -1
+    
+    for i, char in enumerate(text):
+        if char == '{':
+            if not stack:
+                start_idx = i
+            stack.append(char)
+        elif char == '}':
+            if stack:
+                stack.pop()
+                if not stack and start_idx != -1:
+                    # Found complete JSON object
+                    json_str = text[start_idx:i+1]
+                    return json.loads(json_str)
+    
+    raise ValueError("No complete JSON object found")
+
+
+def _extract_json_using_regex(text: str) -> Dict[str, Any]:
+    """Extract JSON using regex patterns with validation"""
+    # More robust regex pattern for JSON objects
+    json_pattern = r'\{[\s\S]*?\}(?=\s*\{|$)'  # Match complete JSON objects
+    matches = re.findall(json_pattern, text, re.DOTALL)
+    
+    for match in matches:
+        try:
+            # Clean and validate the match
+            match = match.strip()
+            if match.startswith('{') and match.endswith('}'):
+                # Try to fix common issues before parsing
+                match = _fix_common_json_issues(match)
+                return json.loads(match)
+        except (json.JSONDecodeError, ValueError):
+            continue
+    
+    raise ValueError("No valid JSON found via regex")
+
+
+def _extract_json_using_llm_fallback(text: str) -> Dict[str, Any]:
+    """
+    Fallback method that uses simple string processing when JSON parsing fails.
+    This is a last resort for badly formatted but still parseable content.
+    """
+    # Look for key-value patterns in the text
+    lines = text.split('\n')
+    result = {}
+    
+    for line in lines:
+        line = line.strip()
+        if ':' in line and not line.startswith('#'):
+            parts = line.split(':', 1)
+            if len(parts) == 2:
+                key = parts[0].strip().strip('"\'')
+                value = parts[1].strip().strip('"\'')
+                if key and value:
+                    result[key] = value
+    
+    if result:
+        return result
+    else:
+        raise ValueError("No parseable key-value pairs found in text")
+
+
+def _fix_common_json_issues(json_str: str) -> str:
+    """Fix common JSON formatting issues"""
+    if not json_str:
+        return json_str
+    
+    # Fix missing quotes around keys
+    json_str = re.sub(r'(\w+)(\s*:\s*)', r'"\1"\2', json_str)
+    
+    # Fix single quotes to double quotes
+    json_str = re.sub(r"'([^']*)'", r'"\1"', json_str)
+    
+    # Fix trailing commas
+    json_str = re.sub(r',\s*}', '}', json_str)
+    json_str = re.sub(r',\s*]', ']', json_str)
+    
+    # Remove comments (JSON doesn't support comments)
+    json_str = re.sub(r'//.*', '', json_str)
+    json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
+    
+    return json_str
+
+
+def map_field_names(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Map various field name variations to the expected field names.
+    """
+    if not isinstance(data, dict):
+        return {}
+
+    # Define field name mappings (common variations to expected names)
+    field_mappings = {
+        # Company name variations
+        "company": "company_name",
+        "company_name": "company_name",
+        "organization": "company_name",
+        "business_name": "company_name",
+
+        # Industry variations
+        "industry": "industry",
+        "sector": "industry",
+        "field": "industry",
+
+        # Target audience variations
+        "target_audience": "target_audience",
+        "audience": "target_audience",
+        "customers": "target_audience",
+        "target_market": "target_audience",
+
+        # Products/Services variations
+        "products_services": "products_services",
+        "products": "products_services",
+        "services": "products_services",
+        "offerings": "products_services",
+
+        # Brand description variations
+        "brand_description": "brand_description",
+        "brand": "brand_description",
+        "description": "brand_description",
+        "about": "brand_description",
+        "mission": "brand_description",
+
+        # Marketing goals variations
+        "marketing_goals": "marketing_goals",
+        "goals": "marketing_goals",
+        "objectives": "marketing_goals",
+        "marketing_objectives": "marketing_goals",
+
+        # Existing content variations
+        "existing_content": "existing_content",
+        "content": "existing_content",
+        "current_content": "existing_content",
+        "marketing_content": "existing_content",
+
+        # Keywords variations
+        "keywords": "keywords",
+        "keyword": "keywords",
+        "seo_keywords": "keywords",
+
+        # Market opportunities variations
+        "market_opportunities": "market_opportunities",
+        "opportunities": "market_opportunities",
+        "growth_areas": "market_opportunities",
+
+        # Competitive advantages variations
+        "competitive_advantages": "competitive_advantages",
+        "advantages": "competitive_advantages",
+        "competitors": "competitive_advantages",
+        "differentiators": "competitive_advantages",
+
+        # Customer pain points variations
+        "customer_pain_points": "customer_pain_points",
+        "pain_points": "customer_pain_points",
+        "problems": "customer_pain_points",
+        "challenges": "customer_pain_points",
+    }
+
+    # Create mapped result
+    mapped_result = {}
+
+    for key, value in data.items():
+        # Map the key if it exists in mappings, otherwise keep original
+        mapped_key = field_mappings.get(key.lower(), key)
+        mapped_result[mapped_key] = value
+
+    return mapped_result
 
 
 def convert_to_docx(content: str) -> bytes:
@@ -47,7 +298,8 @@ def convert_to_docx(content: str) -> bytes:
 class SidebarManager:
     """Manages the application sidebar"""
 
-    def __init__(self):
+    def __init__(self, session_manager: SessionManager):
+        self.session_manager = session_manager
         self.llm_manager = None
 
     def create_sidebar(self) -> Dict[str, Any]:
@@ -56,13 +308,15 @@ class SidebarManager:
 
         with st.sidebar:
             self._create_upgrade_section()
+            
+            self._create_data_download_section()
 
             st.header("🎯 Marketing Task")
             task = st.selectbox(
                 "Select Task",
                 options=AppConfig.MARKETING_TASKS,
-                index=0,
-                key="task_select"
+                key="task_select",
+                on_change=self._on_task_change
             )
 
             st.title("⚙️ AI Configuration")
@@ -97,14 +351,18 @@ class SidebarManager:
                 api_key = None
 
                 if provider != "Ollama":
-                    api_key = st.text_input(
-                        f"{provider} API Key",
-                        type="password",
-                        value=AppConfig.get_api_key(provider),
-                        help=f"Get your API key from {provider}'s dashboard",
-                        key="api_key_input",
-                        on_change=self._on_config_change
-                    )
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        api_key = st.text_input(
+                            f"{provider} API Key",
+                            type="password",
+                            value=AppConfig.get_api_key(provider),
+                            help=f"Get your API key from {provider}'s dashboard",
+                            key="api_key_input",
+                            on_change=self._on_config_change
+                        )
+                    with col2:
+                        st.button("Validate", key=f"validate_{provider}", on_click=self._validate_api_key, args=(provider, endpoint, api_key))
 
                     if provider == "Groq":
                         st.sidebar.markdown("[Get Groq API Key](https://console.groq.com/keys)")
@@ -154,10 +412,14 @@ class SidebarManager:
             cache_key = f"models_{provider}_{endpoint}"
             if cache_key not in st.session_state or st.button("🔄 Refresh Models", key="refresh_models"):
                 with st.spinner("Loading models..."):
-                    models = LLMProviderHandler.fetch_models(provider, endpoint, api_key)
-                    st.session_state[cache_key] = models
+                    models, error = LLMProviderHandler.fetch_models(provider, endpoint, api_key)
+                    if error:
+                        st.error(f"Failed to load models: {error}")
+                        st.session_state[cache_key] = ([], error)
+                    else:
+                        st.session_state[cache_key] = (models, None)
 
-            models = st.session_state.get(cache_key, [])
+            models, error = st.session_state.get(cache_key, ([], None))
 
             if models:
                 # Get current model from session state, default to first model
@@ -171,10 +433,18 @@ class SidebarManager:
                     help="Select the model version to use",
                     on_change=self._on_model_change
                 )
-            else:
+            elif not error:
                 st.warning(f"No models available for {provider}. Click '🔄 Refresh Models' to retry.")
 
         return model
+
+    def _validate_api_key(self, provider: str, endpoint: str, api_key: str):
+        """Validate the API key by fetching models"""
+        _, error = LLMProviderHandler.fetch_models(provider, endpoint, api_key)
+        if error:
+            st.error(f"API key validation failed: {error}")
+        else:
+            st.success("API key is valid!")
 
     def _on_provider_change(self):
         """Handle provider change - clear model cache"""
@@ -184,6 +454,10 @@ class SidebarManager:
         keys_to_remove = [k for k in st.session_state.keys() if k.startswith("models_")]
         for key in keys_to_remove:
             del st.session_state[key]
+
+    def _on_task_change(self):
+        """Handle task change"""
+        st.session_state.task = st.session_state.task_select
 
     def _on_model_change(self):
         """Handle model change - prepare for smooth switching"""
@@ -221,16 +495,41 @@ class SidebarManager:
                 """, unsafe_allow_html=True
             )
 
+    def _create_data_download_section(self):
+        """Creates a section for downloading session data."""
+        st.header("📥 Download Your Data")
+        st.info("Download all your projects and content from this session.")
+        
+        all_data = self.session_manager.get_all_data()
+        
+        # Convert datetime objects to strings for JSON serialization
+        def convert_datetime(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+        try:
+            json_data = json.dumps(all_data, indent=4, default=convert_datetime)
+            
+            st.download_button(
+                label="Download Data as JSON",
+                data=json_data,
+                file_name=f"marketing_ai_session_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+            )
+        except Exception as e:
+            st.error(f"Error preparing data for download: {e}")
+
 
 class ProjectManager:
     """Manages project-related UI components"""
 
-    def __init__(self, db_manager: DatabaseManager):
-        self.db = db_manager
+    def __init__(self, session_manager: SessionManager):
+        self.session_manager = session_manager
 
-    def create_project_selector(self) -> Optional[int]:
+    def create_project_selector(self) -> Optional[str]:
         """Create project selection dropdown"""
-        projects = self.db.get_projects()
+        projects = self.session_manager.get_projects()
 
         if not projects:
             st.info("No projects found. Create your first project below.")
@@ -249,7 +548,7 @@ class ProjectManager:
 
         return None
 
-    def create_project_form(self) -> Optional[int]:
+    def create_project_form(self) -> Optional[str]:
         """Create new project form"""
         with st.expander("Create New Project", expanded=False):
             with st.form("new_project_form"):
@@ -267,7 +566,7 @@ class ProjectManager:
 
                 if st.form_submit_button("Create Project"):
                     if project_name.strip():
-                        project_id = self.db.create_project(
+                        project_id = self.session_manager.create_project(
                             project_name.strip(),
                             project_description.strip()
                         )
@@ -279,9 +578,9 @@ class ProjectManager:
 
         return None
 
-    def show_project_info(self, project_id: int):
+    def show_project_info(self, project_id: str):
         """Display project information"""
-        project = self.db.get_project(project_id)
+        project = self.session_manager.get_project(project_id)
         if project:
             col1, col2, col3 = st.columns(3)
 
@@ -289,7 +588,7 @@ class ProjectManager:
                 st.metric("Project", project["name"])
 
             with col2:
-                content_count = len(self.db.get_project_content(project_id))
+                content_count = len(self.session_manager.get_project_content(project_id))
                 st.metric("Content Pieces", content_count)
 
             with col3:
@@ -335,7 +634,7 @@ class ContentDisplay:
     """Handles content display and export"""
 
     @staticmethod
-    def show_generated_content(content: str, task_type: str, project_id: Optional[int] = None):
+    def show_generated_content(content: str, task_type: str, project_id: Optional[str] = None):
         """Display generated content with export options"""
         st.subheader("Generated Content")
         st.markdown(content)
@@ -354,13 +653,25 @@ class ContentDisplay:
             )
 
         with col2:
-            # Copy to clipboard (via text area)
-            st.text_area(
-                "Copy Content",
-                value=content,
-                height=100,
-                help="Copy the content from this text area"
-            )
+            # Copy to clipboard button
+            if st.button("📋 Copy to Clipboard", help="Click to copy content to clipboard", key=f"copy_{task_type}"):
+                try:
+                    # Use JavaScript to copy to clipboard without causing rerun
+                    import streamlit.components.v1 as components
+                    escaped_content = content.replace('"', '\\"').replace("'", "\\'").replace("`", "\\`")
+                    js_code = f"""
+                    <script>
+                    function copyToClipboard() {{
+                        navigator.clipboard.writeText("{escaped_content}");
+                        return false;
+                    }}
+                    copyToClipboard();
+                    </script>
+                    """
+                    components.html(js_code, height=0)
+                    st.success("✅ Content copied to clipboard!")
+                except Exception as e:
+                    st.error(f"Failed to copy: {str(e)}")
 
     @staticmethod
     def show_performance_score(score_data: Dict[str, Any]):
@@ -398,308 +709,397 @@ class ContentDisplay:
                     st.write(f"{i}. {rec}")
 
 
-class MarketingForm:
-    """Handles the main marketing input form with comprehensive business information"""
+class BusinessContextManager:
+    """Unified business context management with versioning and multi-source import"""
+    
+    def __init__(self, session_manager: SessionManager):
+        self.session_manager = session_manager
+        self.fields = AppConfig.BUSINESS_CONTEXT_FIELDS
+        self.doc_processor = DocumentProcessor()
+        self.web_scraper = WebScraper()
+        self.prompts = Prompts()
+        
+        # Initialize session state
+        if "business_context" not in st.session_state:
+            st.session_state.business_context = {}
 
-    def __init__(self):
-        self.all_fields = {
-            "brand_description": {
-                "label": "Brand Description",
-                "placeholder": "Describe your brand, mission, values, and unique selling points",
-                "required": True,
-                "section": "brand"
+    def display_context_manager(self, llm_client):
+        """Main context manager interface"""
+        st.header("🏢 Business Context Manager")
+        
+        # Load existing context if available
+        project_id = st.session_state.get("current_project_id")
+        if not project_id:
+            st.info("👆 Please select or create a project first")
+            return
+            
+        # Load latest context if not already loaded
+        if not st.session_state.business_context:
+            latest_context = self.session_manager.get_latest_context(project_id)
+            if latest_context:
+                st.session_state.business_context = latest_context
+                st.success("✅ Loaded existing business context")
+
+        self._display_context_summary()
+        self._display_import_sources(llm_client)
+        self._display_version_management()
+        self._display_validation_status()
+
+    def _display_context_summary(self):
+        """Display editable context summary"""
+        st.subheader("📋 Business Information")
+        
+        # Ensure all fields exist in business_context
+        for field_key, _, _ in self.fields:
+            if field_key not in st.session_state.business_context:
+                st.session_state.business_context[field_key] = ""
+        
+        # Create DataFrame for editing
+        context_data = []
+        for field_key, field_label, is_required in self.fields:
+            value = st.session_state.business_context.get(field_key, "")
+            # Handle different value types safely for status checking
+            if isinstance(value, str):
+                is_completed = bool(value.strip())
+            elif isinstance(value, (list, dict)):
+                is_completed = bool(value)  # Non-empty list or dict is considered completed
+            else:
+                is_completed = bool(value)  # Any other truthy value
+                
+            status = "✅" if is_completed else ("❗" if is_required else "⭕")
+            context_data.append({
+                "Field": field_label,
+                "Status": status,
+                "Value": value,
+                "Required": "Yes" if is_required else "No"
+            })
+        
+        df = pd.DataFrame(context_data)
+        
+        # Use a unique key that changes when business_context changes
+        context_hash = hash(str(sorted(st.session_state.business_context.items())))
+        
+        # Display as editable table
+        edited_df = st.data_editor(
+            df,
+            column_config={
+                "Field": st.column_config.TextColumn("Field", disabled=True),
+                "Status": st.column_config.TextColumn("Status", disabled=True, width="small"),
+                "Value": st.column_config.TextColumn("Value", width="large"),
+                "Required": st.column_config.TextColumn("Required", disabled=True, width="small")
             },
-            "target_audience": {
-                "label": "Target Audience",
-                "placeholder": "Describe your ideal customers, demographics, psychographics, and characteristics",
-                "required": True,
-                "section": "audience"
-            },
-            "products_services": {
-                "label": "Products/Services",
-                "placeholder": "List and describe your main products and/or services offered",
-                "required": True,
-                "section": "products"
-            },
-            "marketing_goals": {
-                "label": "Marketing Goals",
-                "placeholder": "Identify your key marketing goals or objectives",
-                "required": True,
-                "section": "goals"
-            },
-            "existing_content": {
-                "label": "Existing Content",
-                "placeholder": "Summarize any existing marketing content, campaigns, or channels",
-                "required": False,
-                "section": "content"
-            },
-            "keywords": {
-                "label": "SEO Keywords",
-                "placeholder": "10-15 relevant keywords for marketing purposes (comma-separated)",
-                "required": False,
-                "section": "seo"
-            },
-            "suggested_topics": {
-                "label": "Content Topics",
-                "placeholder": "5-7 content topics relevant for your marketing strategy",
-                "required": False,
-                "section": "content"
-            },
-            "market_opportunities": {
-                "label": "Market Opportunities",
-                "placeholder": "Identify potential market opportunities, gaps, or areas for growth",
-                "required": False,
-                "section": "market"
-            },
-            "competitive_advantages": {
-                "label": "Competitive Advantages",
-                "placeholder": "Analyze and describe your competitive advantages and differentiators",
-                "required": False,
-                "section": "competition"
-            },
-            "customer_pain_points": {
-                "label": "Customer Pain Points",
-                "placeholder": "Identify customer pain points or problems that your business solves",
-                "required": False,
-                "section": "customers"
-            }
-        }
+            hide_index=True,
+            use_container_width=True,
+            key=f"context_editor_{context_hash}"
+        )
+        
+        # Update session state with edits
+        for i, (field_key, _, _) in enumerate(self.fields):
+            new_value = edited_df.iloc[i]["Value"]
+            st.session_state.business_context[field_key] = new_value
+        
+        # Force immediate update of validation status
+        self._update_validation_status()
 
-    def create_form(self, analysis_data: Optional[Dict[str, str]] = None) -> Optional[Dict[str, str]]:
-        """Create the comprehensive marketing input form"""
-        with st.form("marketing_form"):
-            st.header("📊 Business Information")
+    def _display_import_sources(self, llm_client):
+        """Display import options from various sources"""
+        st.subheader("📥 Import Business Information")
+        
+        tab1, tab2, tab3 = st.tabs(["📄 Document Analysis", "🌐 Website Analysis", "🤖 AI Enhancement"])
+        
+        with tab1:
+            self._document_import_section(llm_client)
+        
+        with tab2:
+            self._website_import_section(llm_client)
+        
+        with tab3:
+            self._ai_enhancement_section(llm_client)
 
-            # Get current task to determine which fields to show
-            task = st.session_state.get("task", "Marketing Strategy")
+    def _document_import_section(self, llm_client):
+        """Document analysis and import"""
+        st.write("Upload business documents to extract context automatically")
+        
+        uploaded_file = st.file_uploader(
+            "Choose document",
+            type=AppConfig.SUPPORTED_FILE_TYPES,
+            help="Upload business plans, marketing materials, or company documents"
+        )
+        
+        if uploaded_file:
+            if st.button("🔍 Analyze Document", type="primary"):
+                with st.spinner("Analyzing document..."):
+                    try:
+                        _, text = self.doc_processor.load_document(uploaded_file.getvalue(), uploaded_file.name)
+                        prompt = self.prompts.get_document_extraction_prompt(text)
+                        from llm_handler import LLMManager
+                        llm_manager = LLMManager()
+                        insights_json = llm_manager.generate(llm_client, prompt)
+                        insights = extract_json_from_text(insights_json)
 
-            # Web scraping options
-            self._create_web_scraping_section()
+                        # Debug: Test JSON parsing
+                        st.write("🔍 **JSON Parsing Test:**")
+                        st.write(f"Raw JSON length: {len(insights_json)}")
+                        st.write(f"Parsed insights keys: {list(insights.keys()) if insights else 'None'}")
+                        st.write(f"Company name from parsed: {insights.get('company_name', 'NOT FOUND') if insights else 'No insights'}")
 
-            # If we have analysis data, pre-populate fields
-            default_values = analysis_data or {}
+                        if insights:
+                            st.success("✅ Document analysis completed!")
+                            
+                            with st.expander("📋 Extracted Information", expanded=True):
+                                st.json(insights)
 
-            # Group fields by sections for better UX
-            sections = {
-                "brand": ["brand_description"],
-                "audience": ["target_audience"],
-                "products": ["products_services"],
-                "goals": ["marketing_goals"],
-                "content": ["existing_content", "suggested_topics"],
-                "seo": ["keywords"],
-                "market": ["market_opportunities"],
-                "competition": ["competitive_advantages"],
-                "customers": ["customer_pain_points"]
-            }
+                            # Automatically apply insights to the data table
+                            st.info("💡 **Automatically applying extracted insights to your business context...**")
+                            
+                            # Apply the insights directly to session state
+                            st.session_state.business_context.update(insights)
 
-            # Determine which sections to show based on task
-            visible_sections = self._get_visible_sections_for_task(task)
+                            # Save to database
+                            self._save_context_version("document")
 
-            form_data = {}
+                            # Force immediate validation update
+                            self._update_validation_status()
+                            
+                            st.success("✅ Document insights automatically applied to your business context!")
+                            st.balloons()
 
-            for section_name, section_fields in sections.items():
-                if section_name in visible_sections:
-                    self._create_section(section_name, section_fields, default_values, form_data)
+                            # Use Streamlit's built-in rerun mechanism with proper state management
+                            st.session_state.document_analysis_completed = True
+                            st.rerun()
+                        else:
+                            st.error("❌ Could not extract insights from document. Please try manual input.")
+                    except Exception as e:
+                        st.error(f"❌ Document analysis failed: {e}")
 
-            # Task-specific additional fields
-            self._create_task_specific_fields(task, default_values, form_data)
+    def _website_import_section(self, llm_client):
+        """Website analysis and import"""
+        st.write("Analyze your website or social media profiles")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            website_url = st.text_input(
+                "Website URL",
+                placeholder="https://www.yourcompany.com"
+            )
+        
+        with col2:
+            social_url = st.text_input(
+                "Social Media URL",
+                placeholder="https://linkedin.com/company/yourcompany"
+            )
+        
+        urls_to_analyze = []
+        if website_url:
+            urls_to_analyze.append(("website", website_url))
+        if social_url:
+            urls_to_analyze.append(("social", social_url))
+        
+        if urls_to_analyze and st.button("🌐 Analyze Online Presence", type="primary"):
+            with st.spinner("Analyzing online presence..."):
+                try:
+                    all_insights = {}
+                    for platform, url in urls_to_analyze:
+                        content = self.web_scraper.scrape_website_content_sync(url)
+                        prompt = self.prompts.get_website_extraction_prompt(content, platform)
+                        from llm_handler import LLMManager
+                        llm_manager = LLMManager()
+                        insights_json = llm_manager.generate(llm_client, prompt)
+                        insights = extract_json_from_text(insights_json)
+                        all_insights.update(insights)
 
-            # Submit button
-            if st.form_submit_button(f"🚀 Generate {task}", type="primary"):
-                # Validate required fields
-                missing_required = self._validate_required_fields(form_data, task)
-                if missing_required:
-                    st.error(f"Please fill in required fields: {', '.join(missing_required)}")
-                    return None
+                    if all_insights:
+                        st.success("✅ Online analysis completed!")
+                        
+                        with st.expander("🌐 Extracted Information", expanded=True):
+                            st.json(all_insights)
+                        
+                        if st.button("✅ Apply Web Insights"):
+                            st.session_state.business_context.update(all_insights)
+                            self._save_context_version("web")
+                            st.success("Web insights applied!")
+                            st.rerun()
+                    else:
+                        st.error("❌ Could not analyze online presence. Please check URLs and try again.")
+                except Exception as e:
+                    st.error(f"❌ Web analysis failed: {e}")
 
-                return form_data
+    def _ai_enhancement_section(self, llm_client):
+        """AI-powered context enhancement"""
+        st.write("Let AI suggest improvements to your business information")
+        
+        current_context = st.session_state.business_context
+        
+        if st.button("🤖 Generate AI Suggestions", type="primary"):
+            with st.spinner("Generating AI suggestions..."):
+                try:
+                    prompt = self.prompts.get_business_context_suggestion_prompt(current_context)
+                    from llm_handler import LLMManager
+                    llm_manager = LLMManager()
+                    suggestions_json = llm_manager.generate(llm_client, prompt)
+                    suggestions = extract_json_from_text(suggestions_json)
 
-        return None
+                    if suggestions:
+                        st.success("✅ AI suggestions generated!")
+                        
+                        with st.expander("🤖 AI Suggestions", expanded=True):
+                            for field_key, suggestion in suggestions.items():
+                                if field_key != "reasoning":
+                                    current_value = current_context.get(field_key, "")
+                                    if current_value != suggestion and isinstance(suggestion, str) and suggestion.strip():
+                                        field_label = next((label for key, label, _ in self.fields if key == field_key), field_key)
+                                        
+                                        st.write(f"**{field_label}:**")
+                                        col1, col2 = st.columns([1, 1])
+                                        
+                                        with col1:
+                                            st.write("Current:")
+                                            st.info(current_value if current_value else "Empty")
+                                        
+                                        with col2:
+                                            st.write("Suggested:")
+                                            st.success(suggestion)
+                                            
+                                            if st.button(f"Apply", key=f"apply_{field_key}"):
+                                                st.session_state.business_context[field_key] = suggestion
+                                                st.success(f"Applied suggestion for {field_label}")
+                                                st.rerun()
+                            
+                            if suggestions.get("reasoning"):
+                                st.write("**AI Reasoning:**")
+                                st.write(suggestions["reasoning"])
+                        
+                        if st.button("✅ Apply All Suggestions"):
+                            for key, value in suggestions.items():
+                                if key != "reasoning" and isinstance(value, str) and value.strip():
+                                    st.session_state.business_context[key] = value
+                            self._save_context_version("ai_enhancement")
+                            st.success("All AI suggestions applied!")
+                            st.rerun()
+                    else:
+                        st.error("❌ Could not generate AI suggestions. Please try again later.")
+                except Exception as e:
+                    st.error(f"❌ AI enhancement failed: {e}")
 
-    def _create_web_scraping_section(self):
-        """Create web scraping configuration section"""
-        with st.expander("🌐 Web Research Options", expanded=False):
-            col1, col2 = st.columns(2)
-
-            with col1:
-                use_web_scraping = st.checkbox(
-                    "Enable Web Research",
-                    value=True,
-                    help="Automatically research industry trends and competitor data from the web",
-                    key="use_web_scraping"
+    def _display_version_management(self):
+        """Display version management controls"""
+        st.subheader("🔄 Version Management")
+        
+        project_id = st.session_state.get("current_project_id")
+        if not project_id:
+            st.info("Select a project to manage context versions")
+            return
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("💾 Save Current Version"):
+                self._save_context_version("manual")
+                st.success("✅ Context version saved!")
+        
+        with col2:
+            versions = self.session_manager.get_all_context_versions(project_id)
+            if versions:
+                version_options = [
+                    f"v{v['version_id']} - {v['source_type']} ({v['created_at'][:16]})"
+                    for v in versions
+                ]
+                
+                selected_version_str = st.selectbox(
+                    "Load Previous Version",
+                    options=version_options,
+                    key="version_selector"
                 )
+                
+                if st.button("🔄 Load Version"):
+                    version_id_str = selected_version_str.split(" ")[0][1:]
+                    selected_context = next((v['context'] for v in versions if v['version_id'] == version_id_str), None)
+                    if selected_context:
+                        st.session_state.business_context = selected_context
+                        st.success("✅ Previous version loaded!")
+                        st.rerun()
 
-            with col2:
-                industry = st.text_input(
-                    "Industry Sector",
-                    placeholder="e.g., Technology, Healthcare, E-commerce",
-                    help="Industry for web research (optional)",
-                    key="industry_input"
-                )
-
-            if use_web_scraping:
-                st.info("💡 Web research will enhance your analysis with current market trends, competitor insights, and industry data.")
-
-    def _get_visible_sections_for_task(self, task: str) -> List[str]:
-        """Determine which sections to show based on the selected task"""
-        base_sections = ["brand", "audience", "products", "goals"]
-
-        task_specific_sections = {
-            "Marketing Strategy": ["content", "seo", "market", "competition", "customers"],
-            "Market Analysis": ["market", "competition", "customers", "seo"],
-            "Competitor Analysis": ["competition", "market", "customers"],
-            "Post Composer": ["content", "seo", "audience"],
-            "Content Calendar": ["content", "seo", "audience", "goals"],
-            "Email Campaign": ["audience", "content", "goals"],
-            "Social Media Strategy": ["content", "seo", "audience", "goals"],
-            "SEO Strategy": ["seo", "content", "competition"],
-            "Brand Guidelines": ["brand", "audience", "content"],
-            "Ad Copy Generator": ["products", "audience", "goals"],
-            "Landing Page": ["products", "audience", "goals", "brand"]
+    def _update_validation_status(self):
+        """Update validation status in session state for immediate feedback"""
+        required_fields = [key for key, _, required in self.fields if required]
+        completed_fields = []
+        
+        for key in required_fields:
+            value = st.session_state.business_context.get(key, "")
+            # Handle different value types safely
+            if isinstance(value, str) and value.strip():
+                completed_fields.append(key)
+            elif isinstance(value, (list, dict)) and value:  # Non-empty list or dict
+                completed_fields.append(key)
+            elif value:  # Any other truthy value
+                completed_fields.append(key)
+        
+        completion_rate = len(completed_fields) / len(required_fields) * 100 if required_fields else 100
+        
+        # Store validation status in session state for immediate access
+        st.session_state.validation_status = {
+            "completion_rate": completion_rate,
+            "completed_fields": completed_fields,
+            "missing_fields": [key for key in required_fields if key not in completed_fields]
         }
 
-        return base_sections + task_specific_sections.get(task, [])
-
-    def _create_section(self, section_name: str, field_names: List[str],
-                       default_values: Dict[str, str], form_data: Dict[str, str]):
-        """Create a form section with multiple fields"""
-        section_titles = {
-            "brand": "🏢 Brand Identity",
-            "audience": "👥 Target Audience",
-            "products": "📦 Products & Services",
-            "goals": "🎯 Marketing Goals",
-            "content": "📝 Content & Marketing",
-            "seo": "🔍 SEO & Keywords",
-            "market": "📈 Market Analysis",
-            "competition": "🏆 Competitive Landscape",
-            "customers": "😊 Customer Insights"
-        }
-
-        st.subheader(section_titles.get(section_name, section_name))
-
-        # Create columns for better layout
-        num_fields = len(field_names)
-        if num_fields == 1:
-            cols = [st.container()]
-        elif num_fields == 2:
-            cols = st.columns(2)
+    def _display_validation_status(self):
+        """Display validation status and next steps"""
+        st.subheader("✅ Validation & Next Steps")
+        
+        # Use stored validation status or calculate fresh
+        if "validation_status" in st.session_state:
+            validation_status = st.session_state.validation_status
+            completion_rate = validation_status["completion_rate"]
+            completed_fields = validation_status["completed_fields"]
+            missing_fields = validation_status["missing_fields"]
+            required_fields_count = len(completed_fields) + len(missing_fields)
         else:
-            # For more fields, use a more compact layout
-            cols = st.columns(2)
+            required_fields = [key for key, _, required in self.fields if required]
+            completed_fields = [
+                key for key in required_fields 
+                if st.session_state.business_context.get(key, "").strip()
+            ]
+            completion_rate = len(completed_fields) / len(required_fields) * 100 if required_fields else 100
+            missing_fields = [key for key in required_fields if key not in completed_fields]
+            required_fields_count = len(required_fields)
+        
+        st.progress(completion_rate / 100)
+        st.write(f"**Completion:** {completion_rate:.0f}% ({len(completed_fields)}/{required_fields_count} required fields)")
+        
+        if missing_fields:
+            missing_labels = [
+                next(label for k, label, _ in self.fields if k == key)
+                for key in missing_fields
+            ]
+            st.warning(f"**Missing required fields:** {', '.join(missing_labels)}")
+        else:
+            st.success("🎉 All required fields completed! You can proceed to Market Intelligence.")
 
-        for i, field_name in enumerate(field_names):
-            field_config = self.all_fields[field_name]
-            col_idx = i % len(cols)
+    def _save_context_version(self, source_type: str = "manual"):
+        """Save current context as a new version"""
+        project_id = st.session_state.get("current_project_id")
+        if project_id and st.session_state.business_context:
+            self.session_manager.save_context_version(
+                project_id, 
+                st.session_state.business_context, 
+                source_type
+            )
 
-            with cols[col_idx] if isinstance(cols[col_idx], st.delta_generator.DeltaGenerator) else cols[col_idx]:
-                # Determine height based on field type
-                height = 100 if field_name in ["keywords", "suggested_topics"] else 120
-
-                value = st.text_area(
-                    f"{field_config['label']}{' *' if field_config['required'] else ''}",
-                    key=f"{field_name}_input",
-                    value=default_values.get(field_name, ""),
-                    height=height,
-                    placeholder=field_config["placeholder"],
-                    help=f"{'Required field' if field_config['required'] else 'Optional field'}"
-                )
-
-                form_data[field_name] = value
-
-    def _create_task_specific_fields(self, task: str, default_values: Dict[str, str], form_data: Dict[str, str]):
-        """Create task-specific additional fields"""
-        if task == "Post Composer":
-            st.subheader("🎨 Content Creation Details")
-
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                post_type = st.selectbox(
-                    "Content Type *",
-                    options=["Instagram Post", "LinkedIn Post", "Twitter Thread", "Blog Post",
-                            "Podcast Script", "Video Script", "Email Newsletter", "Media Brief"],
-                    key="post_type_input",
-                    help="Select the type of content to create"
-                )
-
-            with col2:
-                tone = st.selectbox(
-                    "Tone of Voice *",
-                    options=["Professional", "Casual", "Inspirational", "Educational",
-                            "Promotional", "Conversational", "Authoritative"],
-                    key="tone_input",
-                    help="Select the tone for the generated content"
-                )
-
-            with col3:
-                content_length = st.selectbox(
-                    "Content Length",
-                    options=["Short (50-100 words)", "Medium (100-300 words)", "Long (300-500 words)"],
-                    key="content_length_input",
-                    help="Approximate desired content length"
-                )
-
-            # Topic selection from suggested topics
-            suggested_topics = default_values.get("suggested_topics", "")
-            if suggested_topics:
-                topics_list = [topic.strip() for topic in suggested_topics.split(",") if topic.strip()]
-                if topics_list:
-                    selected_topic = st.selectbox(
-                        "Content Topic (Optional)",
-                        key="selected_topic_input",
-                        options=["Choose from suggestions..."] + topics_list,
-                        help="Select a suggested topic or leave blank for AI to choose"
-                    )
-                    if selected_topic != "Choose from suggestions...":
-                        form_data["selected_topic"] = selected_topic
-
-            form_data.update({
-                "post_type": post_type,
-                "tone": tone,
-                "content_length": content_length
-            })
-
-        elif task in ["Email Campaign", "Social Media Strategy"]:
-            st.subheader("📊 Campaign Details")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                campaign_goal = st.selectbox(
-                    "Campaign Goal",
-                    options=["Brand Awareness", "Lead Generation", "Sales Conversion",
-                            "Customer Retention", "Community Building", "Thought Leadership"],
-                    key="campaign_goal_input"
-                )
-
-            with col2:
-                target_platforms = st.multiselect(
-                    "Target Platforms",
-                    options=["Email", "LinkedIn", "Instagram", "Twitter", "Facebook", "TikTok", "YouTube"],
-                    key="target_platforms_input",
-                    default=["Email"] if task == "Email Campaign" else ["LinkedIn", "Instagram"]
-                )
-
-            form_data.update({
-                "campaign_goal": campaign_goal,
-                "target_platforms": ", ".join(target_platforms)
-            })
-
-    def _validate_required_fields(self, form_data: Dict[str, str], task: str) -> List[str]:
-        """Validate required fields based on task"""
-        required_fields = ["brand_description", "target_audience", "products_services", "marketing_goals"]
-
-        # Add task-specific required fields
-        if task == "Post Composer":
-            required_fields.extend(["post_type", "tone"])
-
-        missing = []
-        for field in required_fields:
-            if not form_data.get(field, "").strip():
-                field_config = self.all_fields.get(field)
-                if field_config:
-                    missing.append(field_config["label"])
-                else:
-                    missing.append(field.replace("_", " ").title())
-
-        return missing
+    def can_proceed_to_next_step(self):
+        """Check if user can proceed to next step"""
+        required_fields = [key for key, _, required in self.fields if required]
+        if not required_fields:
+            return True
+        completed_fields = []
+        for key in required_fields:
+            value = st.session_state.business_context.get(key, "")
+            # Handle different value types safely
+            if isinstance(value, str) and value.strip():
+                completed_fields.append(key)
+            elif isinstance(value, (list, dict)) and value:  # Non-empty list or dict
+                completed_fields.append(key)
+            elif value:  # Any other truthy value
+                completed_fields.append(key)
+        return (len(completed_fields) / len(required_fields)) >= 0.8

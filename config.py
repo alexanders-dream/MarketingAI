@@ -48,8 +48,21 @@ class AppConfig:
     DEFAULT_TEMPERATURE = 0.3
     DEFAULT_MAX_TOKENS = 4096
 
-    # Database
-    DATABASE_PATH = "marketing_ai.db"
+    # Business Context
+    BUSINESS_CONTEXT_FIELDS = [
+        ("company_name", "Company Name", True),
+        ("industry", "Industry", True),
+        ("target_audience", "Target Audience", True),
+        ("products_services", "Products/Services", True),
+        ("brand_description", "Brand Description", True),
+        ("marketing_goals", "Marketing Goals", True),
+        ("existing_content", "Existing Content", False),
+        ("keywords", "SEO Keywords", False),
+        ("market_opportunities", "Market Opportunities", False),
+        ("competitive_advantages", "Competitive Advantages", False),
+        ("customer_pain_points", "Customer Pain Points", False),
+        ("suggested_topics", "Suggested Topics", False),
+    ]
 
     @classmethod
     def get_api_key(cls, provider: str) -> str:
@@ -60,41 +73,3 @@ class AppConfig:
     def get_endpoint(cls, provider: str) -> str:
         """Get default endpoint for a provider"""
         return cls.PROVIDER_ENDPOINTS.get(provider.upper(), "")
-
-
-class DatabaseConfig:
-    """Database schema and queries"""
-
-    # Table schemas
-    PROJECTS_SCHEMA = """
-    CREATE TABLE IF NOT EXISTS projects (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        description TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """
-
-    CONTENT_SCHEMA = """
-    CREATE TABLE IF NOT EXISTS generated_content (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        project_id INTEGER,
-        task_type TEXT NOT NULL,
-        content TEXT NOT NULL,
-        metadata TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (project_id) REFERENCES projects (id)
-    )
-    """
-
-    USER_PREFERENCES_SCHEMA = """
-    CREATE TABLE IF NOT EXISTS user_preferences (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT DEFAULT 'default',
-        key TEXT NOT NULL,
-        value TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, key)
-    )
-    """
