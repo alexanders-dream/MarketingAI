@@ -104,7 +104,7 @@ Marketing AI v3 is a sophisticated, AI-powered marketing content generation plat
 
 5. **Run the application:**
    ```bash
-   streamlit run main.py
+   streamlit run market_agent.py
    ```
 
 ### Environment Configuration
@@ -158,20 +158,23 @@ OLLAMA_BASE_URL=http://localhost:11434
 ### Application Structure
 ```
 marketing-ai-v3/
-├── main.py                 # Application entry point
+├── market_agent.py        # Application entry point
 ├── config.py              # Configuration constants
-├── session_manager.py     # Session and project management
+├── session_manager.py     # Session and project management (in-memory storage)
 ├── llm_handler.py         # AI provider management
 ├── content_generator.py   # Content generation engine
 ├── market_analyzer.py     # Market intelligence analysis
 ├── market_intelligence_ui.py  # Market analysis UI components
 ├── ui_components.py       # Reusable UI components
 ├── document_processor.py  # Document processing utilities
-├── database.py           # Data persistence layer
-├── prompts.py            # AI prompt templates
-├── utils.py              # Utility functions
-└── requirements.txt      # Python dependencies
+├── web_scraper.py         # Web scraping for market research
+├── research_agents.py     # Research agent implementations
+├── prompts.py             # AI prompt templates
+├── utils.py               # Utility functions
+└── requirements.txt       # Python dependencies
 ```
+
+**Note:** Data persistence is handled in-memory via Streamlit's `session_state`. All project data, business context, and generated content are stored in the browser session and will be lost when the session ends. Users can download their data as JSON for backup.
 
 ### Key Components
 - **Unified App Class:** Single entry point replacing dual applications
