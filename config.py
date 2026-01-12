@@ -23,7 +23,8 @@ class AppConfig:
         "GROQ": os.getenv("GROQ_API_KEY", ""),
         "OPENAI": os.getenv("OPENAI_API_KEY", ""),
         "GEMINI": os.getenv("GEMINI_API_KEY", ""),
-        "PANDASAI": os.getenv("PANDAS_API_KEY", "")
+        "PANDASAI": os.getenv("PANDAS_API_KEY", ""),
+        "FIRECRAWL": os.getenv("FIRECRAWL_API_KEY", "")
     }
 
     # Provider Endpoints

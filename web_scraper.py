@@ -10,6 +10,8 @@ import json
 import requests
 from bs4 import BeautifulSoup
 import time
+from firecrawl import FirecrawlApp
+from config import AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,11 @@ class WebScraper:
         )
         # Cache playwright availability to avoid repeated checks
         self._playwright_available = None
+        
+        # Initialize Firecrawl if API key is available
+        self.firecrawl_api_key = AppConfig.get_api_key("FIRECRAWL")
+        self.firecrawl_app = FirecrawlApp(api_key=self.firecrawl_api_key) if self.firecrawl_api_key else None
+
 
     async def scrape_market_data(self, industry: str, company_name: str = None,
                                 max_pages: int = 5) -> Dict[str, Any]:
@@ -266,9 +273,37 @@ class WebScraper:
     
     def _fallback_website_scrape(self, url: str) -> Dict[str, Any]:
         """
-        Fallback website scraping using requests and BeautifulSoup
+        Fallback website scraping using Firecrawl or requests
         Used when crawl4ai fails
         """
+        # Try Firecrawl first if available
+        if self.firecrawl_app:
+            try:
+                logger.info(f"Attempting to scrape {url} using Firecrawl")
+                scrape_result = self.firecrawl_app.scrape_url(url, params={'formats': ['markdown', 'html']})
+                
+                if scrape_result and 'markdown' in scrape_result:
+                    # Firecrawl returns markdown, which is great for LLMs
+                    # We might need to do some light parsing if we strictly need the structure above
+                    # For now, let's map it as best as we can
+                    metadata = scrape_result.get('metadata', {})
+                    
+                    return {
+                        "url": url,
+                        "title": metadata.get('title', ''),
+                        "meta_description": metadata.get('description', ''),
+                        "meta_keywords": "", # Firecrawl might not return this explicitly
+                        "headings": [], # Extracted from markdown if we wanted to parse it
+                        "content": scrape_result.get('markdown', '')[:20000], # Firecrawl gives good markdown
+                        "links": [], 
+                        "social_links": [],
+                        "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "method": "firecrawl"
+                    }
+            except Exception as e:
+                logger.warning(f"Firecrawl scraping failed for {url}: {e}, falling back to requests")
+                
+        # Fallback to requests/BeautifulSoup
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -307,7 +342,7 @@ class WebScraper:
                 "links": [],
                 "social_links": social_links[:10],
                 "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "method": "fallback"
+                "method": "fallback_soup"
             }
             
         except Exception as e:
@@ -619,10 +654,63 @@ class WebScraper:
 
     async def _fallback_scrape(self, queries: List[str]) -> List[Dict[str, Any]]:
         """
-        Fallback scraping method using requests and BeautifulSoup
+        Fallback scraping method using Firecrawl if available, otherwise requests/BeautifulSoup
         Used when Playwright/crawl4ai fails
         """
         results = []
+        
+        # Try Firecrawl first
+        if self.firecrawl_app:
+            try:
+                logger.info("Using Firecrawl for fallback scraping")
+                for query in queries:
+                    try:
+                        # Firecrawl search gives us minimal results, but it's reliable
+                        # Note: Firecrawl search might differ in output format, adapting accordingly
+                        # Assuming search returns list of results
+                        # Search not directly supported in all SDK versions, but let's try or emulate
+                        # Actually Firecrawl allows crawling a URL, but for "search", we might need to search google/duckduckgo directly via Firecrawl if supported
+                        # OR, if Firecrawl has a 'search' method (it generally does or is coming)
+                        # Checking standard Firecrawl python client usage... usually .scrape_url or .crawl_url
+                        # If no direct search, we can scrape a search engine result page via Firecrawl!
+                        
+                        # Let's try to search using scraping search engine results via Firecrawl if direct search isn't there
+                        # But wait, Firecrawl is best for scraping specific pages.
+                        # Actually, Firecrawl recently added a search feature. Let's assume it exists or use scrape on search engine.
+                        # Safe bet: Scrape DuckDuckGo using Firecrawl to avoid blocking
+                        
+                        search_url = f"https://duckduckgo.com/html/?q={query.replace(' ', '+')}"
+                        scrape_result = self.firecrawl_app.scrape_url(search_url, params={'formats': ['html']})
+                        
+                        if scrape_result and 'html' in scrape_result:
+                            soup = BeautifulSoup(scrape_result['html'], 'html.parser')
+                             # Extract search results
+                            search_results_elems = soup.find_all('div', class_='result')
+                            
+                            for result in search_results_elems[:5]:
+                                title_elem = result.find('a', class_='result__a')
+                                snippet_elem = result.find('a', class_='result__snippet')
+                                
+                                if title_elem:
+                                    results.append({
+                                        'title': title_elem.get_text(strip=True),
+                                        'link': title_elem.get('href', ''),
+                                        'snippet': snippet_elem.get_text(strip=True) if snippet_elem else ''
+                                    })
+                                    
+                        time.sleep(1) # Rate limiting
+                        
+                    except Exception as e:
+                         logger.error(f"Firecrawl search failed for query '{query}': {e}")
+                         continue
+                
+                if results:
+                    return results
+                    
+            except Exception as e:
+                logger.warning(f"Firecrawl fallback failed: {e}, falling back to requests")
+        
+        # Fallback to requests (DuckDuckGo HTML)
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }

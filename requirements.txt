@@ -28,3 +28,4 @@ pillow
 streamlit-clipboard
 plotly
 playwright
+firecrawl-py
