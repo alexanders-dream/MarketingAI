@@ -281,7 +281,22 @@ class WebScraper:
             try:
                 logger.info(f"Attempting to scrape {url} using Firecrawl")
                 # Use 'scrape' direct arguments
-                scrape_result = self.firecrawl_app.scrape(url, formats=['markdown', 'html'])
+                # Retry wrapper for rate limits
+                max_retries = 3
+                retry_delay = 5
+                
+                scrape_result = None
+                for attempt in range(max_retries):
+                    try:
+                        scrape_result = self.firecrawl_app.scrape(url, formats=['markdown', 'html'])
+                        break
+                    except Exception as e:
+                        if "Rate limit exceeded" in str(e) and attempt < max_retries - 1:
+                            logger.warning(f"Firecrawl rate limit hit for {url}, waiting {retry_delay}s... (Attempt {attempt+1}/{max_retries})")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2
+                        else:
+                            raise e
                 
                 if scrape_result and 'markdown' in scrape_result:
                     # Firecrawl returns markdown, which is great for LLMs
@@ -668,8 +683,24 @@ class WebScraper:
                     try:
                         # Use Firecrawl's native search method with direct arguments
                         logger.info(f"Searching with Firecrawl: {query}")
-                        search_results = self.firecrawl_app.search(query, limit=5, scrape_options={'formats': ['markdown']})
                         
+                        # Simple retry mechanism for rate limits
+                        max_retries = 3
+                        retry_delay = 5
+                        
+                        search_results = None
+                        for attempt in range(max_retries):
+                            try:
+                                search_results = self.firecrawl_app.search(query, limit=5, scrape_options={'formats': ['markdown']})
+                                break
+                            except Exception as e:
+                                if "Rate limit exceeded" in str(e) and attempt < max_retries - 1:
+                                    logger.warning(f"Firecrawl rate limit hit for '{query}', waiting {retry_delay}s... (Attempt {attempt+1}/{max_retries})")
+                                    time.sleep(retry_delay)
+                                    retry_delay *= 2  # Exponential backoff
+                                else:
+                                    raise e
+
                         if search_results and isinstance(search_results, dict) and 'data' in search_results:
                             # Handle dictionary response with 'data' key
                             for item in search_results['data']:
@@ -687,7 +718,7 @@ class WebScraper:
                                     'snippet': item.get('description', '') or item.get('markdown', '')[:200]
                                 })
                                     
-                        time.sleep(1) # Rate limiting
+                        time.sleep(4) # Rate limiting conservation (15/min ~= 1 every 4s)
                         
                     except Exception as e:
                          logger.error(f"Firecrawl search failed for query '{query}': {e}")
