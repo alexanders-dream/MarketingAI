@@ -280,7 +280,8 @@ class WebScraper:
         if self.firecrawl_app:
             try:
                 logger.info(f"Attempting to scrape {url} using Firecrawl")
-                scrape_result = self.firecrawl_app.scrape_url(url, params={'formats': ['markdown', 'html']})
+                # Use 'scrape' instead of 'scrape_url'
+                scrape_result = self.firecrawl_app.scrape(url, params={'formats': ['markdown', 'html']})
                 
                 if scrape_result and 'markdown' in scrape_result:
                     # Firecrawl returns markdown, which is great for LLMs
@@ -665,38 +666,26 @@ class WebScraper:
                 logger.info("Using Firecrawl for fallback scraping")
                 for query in queries:
                     try:
-                        # Firecrawl search gives us minimal results, but it's reliable
-                        # Note: Firecrawl search might differ in output format, adapting accordingly
-                        # Assuming search returns list of results
-                        # Search not directly supported in all SDK versions, but let's try or emulate
-                        # Actually Firecrawl allows crawling a URL, but for "search", we might need to search google/duckduckgo directly via Firecrawl if supported
-                        # OR, if Firecrawl has a 'search' method (it generally does or is coming)
-                        # Checking standard Firecrawl python client usage... usually .scrape_url or .crawl_url
-                        # If no direct search, we can scrape a search engine result page via Firecrawl!
+                        # Use Firecrawl's native search method
+                        logger.info(f"Searching with Firecrawl: {query}")
+                        search_results = self.firecrawl_app.search(query, params={'limit': 5, 'scrapeOptions': {'formats': ['markdown']}})
                         
-                        # Let's try to search using scraping search engine results via Firecrawl if direct search isn't there
-                        # But wait, Firecrawl is best for scraping specific pages.
-                        # Actually, Firecrawl recently added a search feature. Let's assume it exists or use scrape on search engine.
-                        # Safe bet: Scrape DuckDuckGo using Firecrawl to avoid blocking
-                        
-                        search_url = f"https://duckduckgo.com/html/?q={query.replace(' ', '+')}"
-                        scrape_result = self.firecrawl_app.scrape_url(search_url, params={'formats': ['html']})
-                        
-                        if scrape_result and 'html' in scrape_result:
-                            soup = BeautifulSoup(scrape_result['html'], 'html.parser')
-                             # Extract search results
-                            search_results_elems = soup.find_all('div', class_='result')
-                            
-                            for result in search_results_elems[:5]:
-                                title_elem = result.find('a', class_='result__a')
-                                snippet_elem = result.find('a', class_='result__snippet')
-                                
-                                if title_elem:
-                                    results.append({
-                                        'title': title_elem.get_text(strip=True),
-                                        'link': title_elem.get('href', ''),
-                                        'snippet': snippet_elem.get_text(strip=True) if snippet_elem else ''
-                                    })
+                        if search_results and isinstance(search_results, dict) and 'data' in search_results:
+                            # Handle dictionary response with 'data' key
+                            for item in search_results['data']:
+                                results.append({
+                                    'title': item.get('title', ''),
+                                    'link': item.get('url', ''),
+                                    'snippet': item.get('description', '') or item.get('markdown', '')[:200]
+                                })
+                        elif search_results and isinstance(search_results, list):
+                            # Handle list response
+                            for item in search_results:
+                                results.append({
+                                    'title': item.get('title', ''),
+                                    'link': item.get('url', ''),
+                                    'snippet': item.get('description', '') or item.get('markdown', '')[:200]
+                                })
                                     
                         time.sleep(1) # Rate limiting
                         
