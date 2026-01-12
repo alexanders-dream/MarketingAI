@@ -344,6 +344,24 @@ class MarketAnalysisWizard:
                     # Store results in session state
                     st.session_state.market_analysis_results = analysis_results
                     
+                    # USER JOURNEY FIX: Auto-update business context with new intelligence
+                    if "business_context" in st.session_state:
+                        updates_made = []
+                        # Map analysis fields to context fields
+                        for key, value in analysis_results.items():
+                            # Only update if value exists and is meaningful
+                            if value and isinstance(value, str) and value != "Analysis failed":
+                                # Update if the field exists in business context
+                                # (Note: analysis keys largely match business_context keys by design)
+                                if key in st.session_state.business_context:
+                                    # Optional: Check if we are overwriting substantial content? 
+                                    # For now, we assume analysis is fresher/better.
+                                    st.session_state.business_context[key] = value
+                                    updates_made.append(key)
+                        
+                        if updates_made:
+                            st.toast(f"✅ Updated {len(updates_made)} context fields with new insights!", icon="🔄")
+                    
                     st.success("Market analysis completed successfully!")
                     
                     return analysis_results

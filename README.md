@@ -169,6 +169,7 @@ marketing-ai-v3/
 ├── document_processor.py  # Document processing utilities
 ├── web_scraper.py         # Web scraping for market research
 ├── research_agents.py     # Research agent implementations
+├── parsers.py             # Text parsing and JSON extraction
 ├── prompts.py             # AI prompt templates
 ├── utils.py               # Utility functions
 └── requirements.txt       # Python dependencies
