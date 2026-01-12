@@ -280,8 +280,8 @@ class WebScraper:
         if self.firecrawl_app:
             try:
                 logger.info(f"Attempting to scrape {url} using Firecrawl")
-                # Use 'scrape' instead of 'scrape_url'
-                scrape_result = self.firecrawl_app.scrape(url, params={'formats': ['markdown', 'html']})
+                # Use 'scrape' direct arguments
+                scrape_result = self.firecrawl_app.scrape(url, formats=['markdown', 'html'])
                 
                 if scrape_result and 'markdown' in scrape_result:
                     # Firecrawl returns markdown, which is great for LLMs
@@ -666,9 +666,9 @@ class WebScraper:
                 logger.info("Using Firecrawl for fallback scraping")
                 for query in queries:
                     try:
-                        # Use Firecrawl's native search method
+                        # Use Firecrawl's native search method with direct arguments
                         logger.info(f"Searching with Firecrawl: {query}")
-                        search_results = self.firecrawl_app.search(query, params={'limit': 5, 'scrapeOptions': {'formats': ['markdown']}})
+                        search_results = self.firecrawl_app.search(query, limit=5, scrape_options={'formats': ['markdown']})
                         
                         if search_results and isinstance(search_results, dict) and 'data' in search_results:
                             # Handle dictionary response with 'data' key
