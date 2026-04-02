@@ -8,6 +8,7 @@ import json
 import requests
 from bs4 import BeautifulSoup
 import time
+from datetime import datetime
 from firecrawl import FirecrawlApp
 from config import AppConfig
 
@@ -36,11 +37,13 @@ class WebScraper:
         Returns:
             Dictionary containing market research data
         """
+        current_year = datetime.now().year
         queries = [
-            f"{industry} market trends 2024",
+            f"{industry} market trends {current_year}",
             f"{industry} industry analysis",
             f"{industry} market size and growth",
-            f"{industry} competitive landscape"
+            f"{industry} competitive landscape",
+            f"{industry} forecast {current_year + 1}"
         ]
 
         if company_name:
@@ -287,7 +290,10 @@ class WebScraper:
             link = item.get("link", "")
 
             # Categorize content based on keywords
-            if any(keyword in title + snippet for keyword in ["trend", "2024", "future", "emerging"]):
+            current_yr_str = str(datetime.now().year)
+            next_yr_str = str(datetime.now().year + 1)
+            
+            if any(keyword in title + snippet for keyword in ["trend", current_yr_str, next_yr_str, "future", "emerging"]):
                 processed_data["market_trends"].append({
                     "title": item.get("title", ""),
                     "summary": item.get("snippet", ""),
@@ -518,6 +524,8 @@ class WebScraper:
             try:
                 logger.info("Using Firecrawl for fallback scraping")
                 for query in queries:
+                    if not self.firecrawl_app:
+                        break  # Stop if disabled
                     try:
                         # Use Firecrawl's native search method with direct arguments
                         logger.info(f"Searching with Firecrawl: {query}")
@@ -529,15 +537,23 @@ class WebScraper:
                         search_results = None
                         for attempt in range(max_retries):
                             try:
-                                search_results = self.firecrawl_app.search(query, limit=5, scrape_options={'formats': ['markdown']})
+                                search_results = self.firecrawl_app.search(query, timeout=30000, limit=5, scrape_options={'formats': ['markdown']})
                                 break
                             except Exception as e:
-                                if "Rate limit exceeded" in str(e) and attempt < max_retries - 1:
+                                error_str = str(e)
+                                if "Rate limit exceeded" in error_str and attempt < max_retries - 1:
                                     logger.warning(f"Firecrawl rate limit hit for '{query}', waiting {retry_delay}s... (Attempt {attempt+1}/{max_retries})")
                                     time.sleep(retry_delay)
                                     retry_delay *= 2  # Exponential backoff
+                                elif any(auth_err in error_str.lower() for auth_err in ["unauthorized", "invalid api key", "forbidden"]):
+                                    logger.error("Firecrawl unauthorized or key invalid. Disabling Firecrawl for this session.")
+                                    self.firecrawl_app = None # disable it
+                                    raise e
                                 else:
                                     raise e
+
+                        if not search_results:
+                            continue
 
                         if search_results and isinstance(search_results, dict) and 'data' in search_results:
                             # Handle dictionary response with 'data' key

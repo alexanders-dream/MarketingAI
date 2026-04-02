@@ -3,6 +3,7 @@ Market Analysis Agent for Marketing AI v3 - Enhanced with Guided Research
 """
 import logging
 import asyncio
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -107,7 +108,7 @@ class MarketAnalyzer:
         # Enhance with web data if requested
         if use_web_scraping and (industry or company_name):
             try:
-                web_data = self._scrape_market_web_data(industry, company_name)
+                web_data = self._scrape_market_web_data(industry, company_name, llm=llm)
                 enhanced_results = self._enhance_analysis_with_web_data(llm, analysis_results, web_data)
                 analysis_results.update(enhanced_results)
                 logger.info("Successfully enhanced market analysis with web data")
@@ -304,13 +305,23 @@ class MarketAnalyzer:
             logger.error(f"Competitor analysis generation failed: {str(e)}")
             return f"Error generating competitor analysis: {str(e)}"
 
-    def _scrape_market_web_data(self, industry: str = None, company_name: str = None) -> Dict[str, Any]:
+    def _scrape_market_web_data(self, industry: str = None, company_name: str = None, llm=None) -> Dict[str, Any]:
         """
         Scrape comprehensive market web data using advanced research
         """
         try:
             # Use guided research for comprehensive market analysis
-            market_data = self.guided_research.conduct_guided_research(industry or "general business", company_name)
+            if llm:
+                business_context = BusinessContext(industry=industry or "general business", company_name=company_name or "")
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                market_report = loop.run_until_complete(
+                    self.guided_research.conduct_comprehensive_research(llm, business_context)
+                )
+                loop.close()
+                market_data = {"status": "success", "market_overview": market_report}
+            else:
+                market_data = {}
             
             # Supplement with traditional web scraping
             traditional_market = scrape_market_data_sync(industry or "general business", company_name, max_pages=3)
@@ -593,12 +604,13 @@ class MarketAnalyzer:
             # Use guided research if available and enabled
             if use_guided_research and hasattr(self, 'guided_research') and self.guided_research:
                 try:
-                    research_results = self.guided_research.research_market(
-                        business_info.company_name,
-                        business_info.industry,
-                        business_info.target_audience,
-                        keywords
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    market_report = loop.run_until_complete(
+                        self.guided_research.conduct_comprehensive_research(llm, business_info)
                     )
+                    loop.close()
+                    research_results = {"status": "success", "market_overview": market_report}
                     
                     if research_results and research_results.get("status") == "success":
                         web_data = research_results
@@ -609,7 +621,7 @@ class MarketAnalyzer:
             # Fallback to traditional web scraping if guided research failed or disabled
             if not web_data and use_web_scraping:
                 try:
-                    web_data = self._scrape_market_web_data(keywords, business_info.industry)
+                    web_data = self._scrape_market_web_data(industry=business_info.industry, company_name=business_info.company_name, llm=llm)
                     logger.info("Successfully used web scraping for market analysis")
                 except Exception as e:
                     logger.warning(f"Web scraping failed: {str(e)}")

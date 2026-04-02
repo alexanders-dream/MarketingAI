@@ -5,8 +5,8 @@ import logging
 import asyncio
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
-from enum import Enum
 import json
+from datetime import datetime
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
@@ -98,6 +98,10 @@ class ResearchSupervisor:
         planning_prompt = """
         You are a senior market research strategist tasked with creating a comprehensive research plan.
         
+        **Temporal Context:**
+        Today's Date: {current_date}
+        Prioritize information and market trends from the current or previous year.
+        
         **Business Context:**
         Company: {company_name}
         Industry: {industry}
@@ -142,6 +146,7 @@ class ResearchSupervisor:
         
         try:
             research_plan = await chain.ainvoke({
+                "current_date": datetime.now().strftime("%Y-%m-%d"),
                 "company_name": business_context.company_name,
                 "industry": business_context.industry,
                 "products_services": business_context.products_services,
@@ -189,15 +194,16 @@ class ResearchSupervisor:
     
     def _create_fallback_plan(self, business_context: BusinessContext) -> ResearchPlan:
         """Create a basic research plan as fallback"""
+        current_year = datetime.now().year
         questions = [
             ResearchQuestion(
                 question=f"What is the current market size and growth rate for {business_context.industry}?",
                 task_type="market_analysis",
                 priority=5,
                 search_queries=[
-                    f"{business_context.industry} market size 2024",
+                    f"{business_context.industry} market size {current_year}",
                     f"{business_context.industry} growth rate trends",
-                    f"{business_context.industry} market forecast"
+                    f"{business_context.industry} market forecast {current_year + 1}"
                 ],
                 expected_insights="Market size, growth trends, and future projections"
             ),
@@ -206,7 +212,7 @@ class ResearchSupervisor:
                 task_type="competitor_analysis",
                 priority=5,
                 search_queries=[
-                    f"{business_context.industry} top companies",
+                    f"{business_context.industry} top companies {current_year}",
                     f"{business_context.company_name} competitors",
                     f"{business_context.industry} market leaders"
                 ],
@@ -217,9 +223,9 @@ class ResearchSupervisor:
                 task_type="industry_trends",
                 priority=4,
                 search_queries=[
-                    f"{business_context.industry} trends 2024",
+                    f"{business_context.industry} trends {current_year}",
                     f"{business_context.industry} innovation",
-                    f"{business_context.industry} disruption"
+                    f"{business_context.industry} disruption {current_year}"
                 ],
                 expected_insights="Industry trends, innovations, and disruptions"
             )
