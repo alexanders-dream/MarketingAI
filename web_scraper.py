@@ -545,8 +545,8 @@ class WebScraper:
                                     logger.warning(f"Firecrawl rate limit hit for '{query}', waiting {retry_delay}s... (Attempt {attempt+1}/{max_retries})")
                                     time.sleep(retry_delay)
                                     retry_delay *= 2  # Exponential backoff
-                                elif any(auth_err in error_str.lower() for auth_err in ["unauthorized", "invalid api key", "forbidden"]):
-                                    logger.error("Firecrawl unauthorized or key invalid. Disabling Firecrawl for this session.")
+                                elif any(auth_err in error_str.lower() for auth_err in ["unauthorized", "invalid api key", "forbidden", "payment required", "insufficient credits"]):
+                                    logger.error("Firecrawl unauthorized or key invalid/depleted. Disabling Firecrawl for this session.")
                                     self.firecrawl_app = None # disable it
                                     raise e
                                 else:
@@ -584,10 +584,12 @@ class WebScraper:
             except Exception as e:
                 logger.warning(f"Firecrawl fallback failed: {e}, falling back to requests")
         
-        # Fallback to requests (DuckDuckGo HTML)
+        # Fallback to requests (DuckDuckGo HTML + r.jina.ai plugin)
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
+        
+        from urllib.parse import urlparse, parse_qs
         
         for query in queries:
             try:
@@ -601,15 +603,49 @@ class WebScraper:
                     # Extract search results
                     search_results = soup.find_all('div', class_='result')
                     
-                    for result in search_results[:5]:  # Limit to top 5 results
+                    for result in search_results[:2]:  # Limit to top 2 results per query for Jina API rate limits
                         title_elem = result.find('a', class_='result__a')
                         snippet_elem = result.find('a', class_='result__snippet')
                         
                         if title_elem:
+                            title = title_elem.get_text(strip=True)
+                            raw_link = title_elem.get('href', '')
+                            
+                            # Extract actual URL from DuckDuckGo redirect
+                            link = raw_link
+                            if 'duckduckgo.com/l/?' in raw_link:
+                                parsed = urlparse(raw_link)
+                                qs = parse_qs(parsed.query)
+                                if 'uddg' in qs:
+                                    link = qs['uddg'][0]
+                            elif raw_link.startswith('/url?q='):
+                                parsed = urlparse(raw_link)
+                                qs = parse_qs(parsed.query)
+                                if 'q' in qs:
+                                    link = qs['q'][0]
+                                    
+                            snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
+                            
+                            # Deep Scrape with r.jina.ai
+                            if link and link.startswith('http'):
+                                try:
+                                    logger.info(f"Deep scraping via r.jina.ai: {link}")
+                                    jina_url = f"https://r.jina.ai/{link}"
+                                    jina_resp = requests.get(jina_url, timeout=15)
+                                    if jina_resp.status_code == 200:
+                                        detailed_content = jina_resp.text
+                                        # Only keep the top 2000 characters to prevent overloading LLM context
+                                        if detailed_content and len(detailed_content) > 100:
+                                            snippet = detailed_content[:2000]
+                                except Exception as e:
+                                    logger.warning(f"Jina Reader failed for {link}: {e}")
+                                    
+                                time.sleep(2) # Prevent tripping Jina rate limits (20/min)
+                            
                             results.append({
-                                'title': title_elem.get_text(strip=True),
-                                'link': title_elem.get('href', ''),
-                                'snippet': snippet_elem.get_text(strip=True) if snippet_elem else ''
+                                'title': title,
+                                'link': link,
+                                'snippet': snippet
                             })
                 
                 # Add delay to be respectful
@@ -619,7 +655,6 @@ class WebScraper:
             except Exception as e:
                 logger.error(f"Fallback scraping failed for query '{query}': {str(e)}")
                 # Don't add mock data - let the calling function handle the empty results
-                # This ensures data reliability and prevents misleading information
                 continue
         
         return results

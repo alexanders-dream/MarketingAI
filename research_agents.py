@@ -67,9 +67,9 @@ class ResearchFinding(BaseModel):
     """Individual research finding"""
     question: str = Field(description="The research question this addresses")
     finding: str = Field(description="The key finding or insight")
-    sources: List[str] = Field(description="Sources of information")
-    confidence: float = Field(description="Confidence level (0-1)")
-    implications: str = Field(description="Business implications of this finding")
+    sources: List[str] = Field(default_factory=list, description="Sources of information")
+    confidence: float = Field(default=0.8, description="Confidence level (0-1)")
+    implications: str = Field(default="No specific implications identified.", description="Business implications of this finding")
 
 
 class ResearchSupervisor:
