@@ -72,6 +72,13 @@ class ResearchFinding(BaseModel):
     implications: str = Field(default="No specific implications identified.", description="Business implications of this finding")
 
 
+class EvaluationResult(BaseModel):
+    """Evaluation of research completeness"""
+    is_complete: bool = Field(description="Whether the research findings comprehensively address the business context and goals")
+    missing_insights: List[str] = Field(description="Specific intelligence gaps still remaining")
+    new_questions: List[ResearchQuestion] = Field(description="New, highly-targeted research questions to fill the gaps. Empty if complete.")
+
+
 class ResearchSupervisor:
     """Supervisor agent that coordinates research activities"""
     
@@ -515,6 +522,60 @@ class ResearchSynthesizer:
                 formatted.append("---")
         
         return "\n".join(formatted)
+        return "\n".join(formatted)
+
+
+class ResearchEvaluator:
+    """Evaluates collected findings to determine if more research is required"""
+    
+    async def evaluate_findings(self, llm, business_context: BusinessContext, 
+                              original_plan: ResearchPlan, findings: List[ResearchFinding]) -> EvaluationResult:
+        """Evaluate if the findings are sufficient or if more targeted research is needed"""
+        eval_prompt = """
+        You are a senior market research director evaluating a set of research findings against the original goals.
+        
+        **Business Context:**
+        Company: {company_name}
+        Industry: {industry}
+        Market Goals: {market_goals}
+        Original Focus: {research_focus}
+        
+        **Collected Findings:**
+        {findings}
+        
+        **Task:**
+        Evaluate the collected findings to determine if they successfully and comprehensively answer the original research goals.
+        
+        If there are critical gaps (e.g. missing quantitative market size, unverified competitor pricing, lack of customer behavior data), set 'is_complete' to false and generate 1-3 new 'ResearchQuestion' objects to specifically hunt for the missing data.
+        
+        If the data is generally comprehensive enough to write a strong market analysis report and answers the fundamental business goals, set 'is_complete' to true and leave 'new_questions' empty.
+        
+        {format_instructions}
+        """
+        
+        parser = PydanticOutputParser(pydantic_object=EvaluationResult)
+        prompt = ChatPromptTemplate.from_template(eval_prompt)
+        
+        chain = prompt | llm | parser
+        
+        # Format the findings for the LLM
+        formatted_findings = "\n\n".join([f"Q: {f.question}\nA: {f.finding}" for f in findings])
+        
+        try:
+            result = await chain.ainvoke({
+                "company_name": business_context.company_name,
+                "industry": business_context.industry,
+                "market_goals": business_context.market_goals,
+                "research_focus": original_plan.research_focus,
+                "findings": formatted_findings[:8000],  # Keep context size manageable
+                "format_instructions": parser.get_format_instructions()
+            })
+            return result
+        except Exception as e:
+            logger.error(f"Evaluating research findings failed: {e}")
+            # Failsafe: Continue to synthesis
+            return EvaluationResult(is_complete=True, missing_insights=["Evaluation failed, assuming complete."], new_questions=[])
+
 
 
 class GuidedMarketResearch:
@@ -524,18 +585,21 @@ class GuidedMarketResearch:
         self.supervisor = ResearchSupervisor()
         self.market_researcher = MarketResearcher()
         self.synthesizer = ResearchSynthesizer()
+        self.evaluator = ResearchEvaluator()  # Active Evaluator Agent
     
     async def conduct_comprehensive_research(self, llm, business_context: BusinessContext, 
                                            vector_store: Optional[FAISS] = None,
-                                           max_concurrent_research: int = 3) -> str:
+                                           max_concurrent_research: int = 3,
+                                           max_iterations: int = 2) -> str:
         """
-        Conduct comprehensive guided market research
+        Conduct comprehensive guided market research with autonomous evaluation
         
         Args:
             llm: Language model instance
             business_context: Business context from uploaded documents
             vector_store: Optional vector store for document context
             max_concurrent_research: Maximum concurrent research tasks
+            max_iterations: Max numbers of targeted follow-up research cycles
             
         Returns:
             Comprehensive market analysis report
@@ -543,19 +607,47 @@ class GuidedMarketResearch:
         try:
             logger.info("Starting guided market research process")
             
-            # Step 1: Create research plan
-            research_plan = await self.supervisor.create_research_plan(
+            # Step 1: Create initial research plan
+            current_plan = await self.supervisor.create_research_plan(
                 llm, business_context, vector_store
             )
             
-            # Step 2: Execute research questions concurrently
-            research_findings = await self._execute_research_plan(
-                llm, research_plan, business_context, max_concurrent_research
-            )
+            all_findings = []
             
-            # Step 3: Synthesize findings into comprehensive report
+            # Step 2: Execute Action/Reflection Loop
+            for iteration in range(max_iterations):
+                logger.info(f"Starting research iteration {iteration + 1}/{max_iterations}")
+                
+                # Execute current questions concurrently
+                new_findings = await self._execute_research_plan(
+                    llm, current_plan, business_context, max_concurrent_research
+                )
+                
+                all_findings.extend(new_findings)
+                
+                # Exit loop immediately if it's the final planned iteration
+                if iteration == max_iterations - 1:
+                    logger.info("Max targeted research iterations reached. Proceeding to synthesis.")
+                    break
+                    
+                # Evaluate the accumulated findings for gaps
+                logger.info("Evaluating collective research findings for intelligent gap analysis...")
+                evaluation = await self.evaluator.evaluate_findings(
+                    llm, business_context, current_plan, all_findings
+                )
+                
+                if evaluation.is_complete or not evaluation.new_questions:
+                    logger.info("Research evaluation marked complete with no gaps. Proceeding to synthesis.")
+                    break
+                
+                logger.info(f"Identified research gaps: {', '.join(evaluation.missing_insights)}. Spawning {len(evaluation.new_questions)} new targeted queries.")
+                
+                # Assign follow-up questions to the plan for the next loop iteration
+                current_plan.research_questions = evaluation.new_questions
+            
+            # Step 3: Synthesize ultimate findings into comprehensive report
             final_report = await self.synthesizer.synthesize_research(
-                llm, research_findings, business_context, research_plan
+                llm, all_findings, business_context, current_plan
             )
             
             logger.info("Completed guided market research process")
