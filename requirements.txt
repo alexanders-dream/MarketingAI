@@ -27,3 +27,4 @@ plotly
 firecrawl-py
 beautifulsoup4
 torchvision
+pypdf
