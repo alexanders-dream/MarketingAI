@@ -62,7 +62,7 @@ Marketing AI v3 is a sophisticated, AI-powered marketing content generation plat
 - **PDF Processing:** PyPDF2, unstructured
 - **Office Documents:** python-docx
 - **Text Processing:** Built-in Python libraries
-- **Web Scraping:** crawl4ai for market research
+- **Web Scraping:** firecrawl for market research
 
 ### Data Visualization
 - **Charts:** Plotly for interactive market analysis charts

@@ -22,10 +22,8 @@ langchain-unstructured
 langchain-ollama
 langchain-huggingface
 docx2txt
-crawl4ai
 google-generativeai
 pillow
 streamlit-clipboard
 plotly
-playwright
 firecrawl-py

@@ -1,0 +1,19 @@
+{
+  "name": "marketing-ai-blocks",
+  "version": "1.0.0",
+  "description": "Gutenberg blocks for Marketing AI plugin",
+  "scripts": {
+    "build": "wp-scripts build",
+    "start": "wp-scripts start"
+  },
+  "devDependencies": {
+    "@wordpress/scripts": "^26.0.0"
+  },
+  "dependencies": {
+    "@wordpress/block-editor": "^12.0.0",
+    "@wordpress/blocks": "^12.0.0",
+    "@wordpress/components": "^25.0.0",
+    "@wordpress/element": "^5.0.0",
+    "@wordpress/i18n": "^4.0.0"
+  }
+}

@@ -4,8 +4,6 @@ Web Scraper Module for Marketing AI v3
 import logging
 import asyncio
 from typing import List, Dict, Any, Optional
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
-from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
 import json
 import requests
 from bs4 import BeautifulSoup
@@ -17,17 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 class WebScraper:
-    """Web scraper using crawl4ai for market research and competitor analysis"""
+    """Web scraper using Firecrawl for market research and competitor analysis"""
 
     def __init__(self):
-        self.browser_config = BrowserConfig(
-            headless=True,
-            verbose=False,
-            extra_args=["--disable-gpu", "--disable-dev-shm-usage", "--no-sandbox"]
-        )
-        # Cache playwright availability to avoid repeated checks
-        self._playwright_available = None
-        
         # Initialize Firecrawl if API key is available
         self.firecrawl_api_key = AppConfig.get_api_key("FIRECRAWL")
         self.firecrawl_app = FirecrawlApp(api_key=self.firecrawl_api_key) if self.firecrawl_api_key else None
@@ -60,47 +50,12 @@ class WebScraper:
                 f"{company_name} industry analysis"
             ])
 
-        all_results = []
-        
-        # Check if Playwright/crawl4ai is likely to work
-        playwright_available = self._check_playwright_availability()
-        
-        if playwright_available:
-            try:
-                # Try using crawl4ai first
-                async with AsyncWebCrawler(config=self.browser_config) as crawler:
-                    for query in queries[:max_pages]:
-                        try:
-                            search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}&num=10"
-                            result = await crawler.arun(
-                                url=search_url,
-                                config=CrawlerRunConfig(
-                                    cache_mode=CacheMode.BYPASS,
-                                    extraction_strategy=JsonCssExtractionStrategy({
-                                        "title": "h3",
-                                        "link": "a[href]",
-                                        "snippet": ".VwiC3b, .s3v9rd, .kvH3mc"
-                                    })
-                                )
-                            )
-
-                            if result.success:
-                                data = json.loads(result.extracted_content)
-                                all_results.extend(data)
-                                logger.info(f"Successfully scraped data for query: {query}")
-
-                        except Exception as e:
-                            logger.error(f"Error scraping for query '{query}': {str(e)}")
-                            continue
-                            
-            except Exception as e:
-                logger.warning(f"Crawl4ai failed, using fallback method: {str(e)}")
-                # Use fallback method when crawl4ai fails
-                all_results = await self._fallback_scrape(queries[:max_pages])
-        else:
-            # Skip crawl4ai and use fallback directly
-            logger.info("Playwright not available, using fallback scraping method")
+        # Use fallback method directly (which now uses Firecrawl)
+        try:
             all_results = await self._fallback_scrape(queries[:max_pages])
+        except Exception as e:
+            logger.error(f"Error scraping market data: {str(e)}")
+            all_results = []
 
         return self._process_market_data(all_results, industry, company_name)
 
@@ -125,47 +80,12 @@ class WebScraper:
             f"top {industry} companies"
         ]
 
-        all_results = []
-        
-        # Check if Playwright/crawl4ai is likely to work
-        playwright_available = self._check_playwright_availability()
-        
-        if playwright_available:
-            try:
-                # Try using crawl4ai first
-                async with AsyncWebCrawler(config=self.browser_config) as crawler:
-                    for query in queries[:max_pages]:
-                        try:
-                            search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}&num=10"
-                            result = await crawler.arun(
-                                url=search_url,
-                                config=CrawlerRunConfig(
-                                    cache_mode=CacheMode.BYPASS,
-                                    extraction_strategy=JsonCssExtractionStrategy({
-                                        "title": "h3",
-                                        "link": "a[href]",
-                                        "snippet": ".VwiC3b, .s3v9rd, .kvH3mc"
-                                    })
-                                )
-                            )
-
-                            if result.success:
-                                data = json.loads(result.extracted_content)
-                                all_results.extend(data)
-                                logger.info(f"Successfully scraped competitor data for query: {query}")
-
-                        except Exception as e:
-                            logger.error(f"Error scraping competitors for query '{query}': {str(e)}")
-                            continue
-                            
-            except Exception as e:
-                logger.warning(f"Crawl4ai failed for competitor scraping, using fallback method: {str(e)}")
-                # Use fallback method when crawl4ai fails
-                all_results = await self._fallback_scrape(queries[:max_pages])
-        else:
-            # Skip crawl4ai and use fallback directly
-            logger.info("Playwright not available for competitor scraping, using fallback method")
+        # Use fallback method directly (which now uses Firecrawl)
+        try:
             all_results = await self._fallback_scrape(queries[:max_pages])
+        except Exception as e:
+            logger.error(f"Error scraping competitor data: {str(e)}")
+            all_results = []
 
         return self._process_competitor_data(all_results, company_name, industry)
 
@@ -179,51 +99,7 @@ class WebScraper:
         Returns:
             Dictionary containing website content and metadata
         """
-        try:
-            async with AsyncWebCrawler(config=self.browser_config) as crawler:
-                # Configure crawler for comprehensive content extraction
-                result = await crawler.arun(
-                    url=url,
-                    config=CrawlerRunConfig(
-                        cache_mode=CacheMode.BYPASS,
-                        extraction_strategy=JsonCssExtractionStrategy({
-                            "title": "title",
-                            "meta_description": "meta[name='description']",
-                            "meta_keywords": "meta[name='keywords']",
-                            "headings": "h1, h2, h3, h4, h5, h6",
-                            "content": "p, div[class*='content'], div[class*='text'], article, section",
-                            "links": "a[href]",
-                            "images": "img[src]",
-                            "social_links": "a[href*='facebook.com'], a[href*='twitter.com'], a[href*='linkedin.com'], a[href*='instagram.com']"
-                        })
-                    )
-                )
-                
-                if result.success:
-                    extracted_data = json.loads(result.extracted_content)
-                    
-                    # Process and structure the data
-                    processed_data = {
-                        "url": url,
-                        "title": self._extract_text(extracted_data, "title"),
-                        "meta_description": self._extract_text(extracted_data, "meta_description"),
-                        "meta_keywords": self._extract_text(extracted_data, "meta_keywords"),
-                        "headings": self._extract_headings(extracted_data),
-                        "content": self._extract_main_content(extracted_data),
-                        "links": self._extract_links(extracted_data),
-                        "social_links": self._extract_social_links(extracted_data),
-                        "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    
-                    logger.info(f"Successfully scraped website: {url}")
-                    return processed_data
-                else:
-                    logger.error(f"Failed to scrape website: {url}")
-                    return self._fallback_website_scrape(url)
-                    
-        except Exception as e:
-            logger.error(f"Error scraping website {url}: {str(e)}")
-            return self._fallback_website_scrape(url)
+        return self._fallback_website_scrape(url)
     
     def _extract_text(self, data: List[Dict], field_name: str) -> str:
         """Extract text from scraped data"""
@@ -273,8 +149,7 @@ class WebScraper:
     
     def _fallback_website_scrape(self, url: str) -> Dict[str, Any]:
         """
-        Fallback website scraping using Firecrawl or requests
-        Used when crawl4ai fails
+        Website scraping using Firecrawl or requests
         """
         # Try Firecrawl first if available
         if self.firecrawl_app:
@@ -632,46 +507,9 @@ class WebScraper:
 
         return deduplicated
 
-    def _check_playwright_availability(self) -> bool:
-        """
-        Check if Playwright is available and working on this system.
-        Returns False if Playwright is likely to fail due to Windows asyncio issues.
-        Uses cached value to avoid repeated checks.
-        """
-        # Return cached value if already checked
-        if self._playwright_available is not None:
-            return self._playwright_available
-            
-        try:
-            # Try to import and create a simple Playwright instance to test availability
-            import asyncio
-            from playwright.async_api import async_playwright
-            
-            # Test if asyncio subprocess works on this Windows system
-            # This is a known issue with Python 3.10+ on Windows
-            try:
-                # Simple test to see if subprocess creation works
-                proc = asyncio.create_subprocess_exec('echo', 'test')
-                proc.close()  # Clean up if it worked
-                self._playwright_available = True
-                logger.info("Playwright is available on this system")
-            except NotImplementedError:
-                logger.warning("Playwright not available due to asyncio subprocess issues on Windows")
-                self._playwright_available = False
-                
-        except ImportError:
-            logger.warning("Playwright not installed")
-            self._playwright_available = False
-        except Exception as e:
-            logger.warning(f"Playwright availability check failed: {e}")
-            self._playwright_available = False
-            
-        return self._playwright_available
-
     async def _fallback_scrape(self, queries: List[str]) -> List[Dict[str, Any]]:
         """
-        Fallback scraping method using Firecrawl if available, otherwise requests/BeautifulSoup
-        Used when Playwright/crawl4ai fails
+        Scraping method using Firecrawl if available, otherwise requests/DuckDuckGo
         """
         results = []
         
