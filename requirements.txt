@@ -15,10 +15,8 @@ python-docx
 chromadb
 sentence-transformers
 faiss-cpu
-unstructured
-unstructured[pdf]
+opencv-python-headless
 pydantic
-langchain-unstructured
 langchain-ollama
 langchain-huggingface
 docx2txt

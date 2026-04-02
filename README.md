@@ -59,7 +59,7 @@ Marketing AI v3 is a sophisticated, AI-powered marketing content generation plat
 - **Google Gemini:** Multimodal capabilities
 
 ### Document Processing
-- **PDF Processing:** PyPDF2, unstructured
+- **PDF Processing:** PyPDF2
 - **Office Documents:** python-docx
 - **Text Processing:** Built-in Python libraries
 - **Web Scraping:** firecrawl for market research
