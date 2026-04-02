@@ -5,6 +5,7 @@ import logging
 import asyncio
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
+from enum import Enum
 import json
 from datetime import datetime
 
