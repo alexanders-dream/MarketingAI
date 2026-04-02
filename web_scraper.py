@@ -103,6 +103,13 @@ class WebScraper:
             Dictionary containing website content and metadata
         """
         return self._fallback_website_scrape(url)
+        
+    async def search_custom_queries(self, queries: List[str]) -> List[Dict[str, Any]]:
+        """
+        Execute specific search queries and return deep scraped results.
+        This provides a public interface to the raw search capabilities for agents.
+        """
+        return await self._fallback_scrape(queries)
     
     def _extract_text(self, data: List[Dict], field_name: str) -> str:
         """Extract text from scraped data"""

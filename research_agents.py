@@ -117,7 +117,7 @@ class ResearchSupervisor:
         {document_context}
         
         **Task:**
-        Create a structured research plan with 8-12 specific research questions that will provide comprehensive market intelligence. Focus on:
+        Create a structured research plan with 4-6 specific, high-impact research questions that will provide comprehensive market intelligence. Focus on:
         
         1. Market size, trends, and growth opportunities
         2. Competitive landscape and positioning
@@ -132,7 +132,7 @@ class ResearchSupervisor:
         - Clear, specific question
         - Task type (market_analysis, competitor_analysis, etc.)
         - Priority level (1-5)
-        - 2-3 specific search queries
+        - 1-2 specific search queries
         - Expected insights to be gained
         
         Ensure questions are actionable and will lead to concrete business insights.
@@ -282,24 +282,22 @@ class MarketResearcher:
         """Perform web searches for the given queries"""
         all_results = {}
         
-        for query in search_queries:
+        # Limit to 2 queries per question to speed up the research loop
+        for query in search_queries[:2]:
             try:
                 # Enhance query with business context
                 enhanced_query = f"{query} {business_context.industry}"
                 if business_context.company_name:
                     enhanced_query += f" {business_context.company_name}"
                 
-                results = await self.web_scraper.scrape_market_data(
-                    industry=business_context.industry,
-                    company_name=business_context.company_name,
-                    max_pages=3
-                )
+                # Fetch actual requested query rather than defaulting to hardcoded market queries
+                results = await self.web_scraper.search_custom_queries([enhanced_query])
                 
                 all_results[query] = results
                 
             except Exception as e:
                 logger.error(f"Search failed for query '{query}': {str(e)}")
-                all_results[query] = {}
+                all_results[query] = []
         
         return all_results
     
