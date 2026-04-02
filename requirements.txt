@@ -25,3 +25,5 @@ pillow
 streamlit-clipboard
 plotly
 firecrawl-py
+beautifulsoup4
+torchvision
