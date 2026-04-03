@@ -28,3 +28,5 @@ firecrawl-py
 beautifulsoup4
 torchvision
 pypdf
+reportlab
+kaleido

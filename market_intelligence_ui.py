@@ -9,6 +9,8 @@ from typing import Dict, Any, Optional
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import io
+import io
 
 
 class MarketIntelligenceDashboard:
@@ -269,15 +271,210 @@ class MarketIntelligenceDashboard:
         """Display export options for the analysis"""
         st.subheader("📤 Export Options")
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("📄 Export to PDF"):
-                st.info("PDF export functionality would be implemented here")
+            if st.button("📄 Export to PDF", use_container_width=True):
+                try:
+                    from export_utils import MarketIntelligenceExporter
+                    exporter = MarketIntelligenceExporter()
+                    
+                    # Generate charts from real data
+                    charts = []
+                    
+                    # Market overview chart
+                    try:
+                        market_chart = exporter.create_market_overview_chart(analysis_data)
+                        market_img = exporter.export_chart_as_image(market_chart, format='png')
+                        charts.append({'title': 'Market Size Projection', 'image_data': io.BytesIO(market_img)})
+                    except Exception as e:
+                        st.warning(f"Market chart generation failed: {str(e)}")
+                    
+                    # Competitor analysis chart
+                    try:
+                        competitor_chart = exporter.create_competitor_analysis_chart(analysis_data)
+                        competitor_img = exporter.export_chart_as_image(competitor_chart, format='png')
+                        charts.append({'title': 'Competitor Analysis', 'image_data': io.BytesIO(competitor_img)})
+                    except Exception as e:
+                        st.warning(f"Competitor chart generation failed: {str(e)}")
+                    
+                    # Target segment chart
+                    try:
+                        segment_chart = exporter.create_target_segment_chart(analysis_data)
+                        segment_img = exporter.export_chart_as_image(segment_chart, format='png')
+                        charts.append({'title': 'Target Segments', 'image_data': io.BytesIO(segment_img)})
+                    except Exception as e:
+                        st.warning(f"Segment chart generation failed: {str(e)}")
+                    
+                    # Market trends chart
+                    try:
+                        trends_chart = exporter.create_market_trends_chart(analysis_data)
+                        trends_img = exporter.export_chart_as_image(trends_chart, format='png')
+                        charts.append({'title': 'Market Trends', 'image_data': io.BytesIO(trends_img)})
+                    except Exception as e:
+                        st.warning(f"Trends chart generation failed: {str(e)}")
+                    
+                    # Generate PDF with charts
+                    pdf_bytes = exporter.export_to_pdf(analysis_data, charts)
+                    
+                    # Provide download button
+                    st.download_button(
+                        label="⬇️ Download PDF",
+                        data=pdf_bytes,
+                        file_name=f"market_intelligence_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                    
+                    st.success(f"✅ PDF generated with {len(charts)} charts!")
+                    
+                except Exception as e:
+                    st.error(f"PDF export failed: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
         
         with col2:
-            if st.button("📊 Export Charts"):
-                st.info("Chart export functionality would be implemented here")
+            if st.button("📊 Export Charts", use_container_width=True):
+                try:
+                    from export_utils import MarketIntelligenceExporter
+                    exporter = MarketIntelligenceExporter()
+                    
+                    # Create tabs for different charts
+                    chart_tabs = st.tabs(["Market Overview", "Competitors", "Segments", "Trends"])
+                    
+                    # Market Overview Chart
+                    with chart_tabs[0]:
+                        try:
+                            market_chart = exporter.create_market_overview_chart(analysis_data)
+                            st.plotly_chart(market_chart, use_container_width=True)
+                            
+                            market_img = exporter.export_chart_as_image(market_chart, format='png')
+                            st.download_button(
+                                label="⬇️ Download PNG",
+                                data=market_img,
+                                file_name=f"market_overview_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                                mime="image/png",
+                                use_container_width=True
+                            )
+                        except Exception as e:
+                            st.error(f"Market chart failed: {str(e)}")
+                    
+                    # Competitor Analysis Chart
+                    with chart_tabs[1]:
+                        try:
+                            competitor_chart = exporter.create_competitor_analysis_chart(analysis_data)
+                            st.plotly_chart(competitor_chart, use_container_width=True)
+                            
+                            competitor_img = exporter.export_chart_as_image(competitor_chart, format='png')
+                            st.download_button(
+                                label="⬇️ Download PNG",
+                                data=competitor_img,
+                                file_name=f"competitor_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                                mime="image/png",
+                                use_container_width=True
+                            )
+                        except Exception as e:
+                            st.error(f"Competitor chart failed: {str(e)}")
+                    
+                    # Target Segment Chart
+                    with chart_tabs[2]:
+                        try:
+                            segment_chart = exporter.create_target_segment_chart(analysis_data)
+                            st.plotly_chart(segment_chart, use_container_width=True)
+                            
+                            segment_img = exporter.export_chart_as_image(segment_chart, format='png')
+                            st.download_button(
+                                label="⬇️ Download PNG",
+                                data=segment_img,
+                                file_name=f"target_segments_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                                mime="image/png",
+                                use_container_width=True
+                            )
+                        except Exception as e:
+                            st.error(f"Segment chart failed: {str(e)}")
+                    
+                    # Market Trends Chart
+                    with chart_tabs[3]:
+                        try:
+                            trends_chart = exporter.create_market_trends_chart(analysis_data)
+                            st.plotly_chart(trends_chart, use_container_width=True)
+                            
+                            trends_img = exporter.export_chart_as_image(trends_chart, format='png')
+                            st.download_button(
+                                label="⬇️ Download PNG",
+                                data=trends_img,
+                                file_name=f"market_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                                mime="image/png",
+                                use_container_width=True
+                            )
+                        except Exception as e:
+                            st.error(f"Trends chart failed: {str(e)}")
+                    
+                except Exception as e:
+                    st.error(f"Chart export failed: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
+        
+        with col3:
+            if st.button("📋 Export All Charts", use_container_width=True):
+                try:
+                    from export_utils import MarketIntelligenceExporter
+                    exporter = MarketIntelligenceExporter()
+                    
+                    # Generate all charts and provide as zip
+                    import zipfile
+                    
+                    zip_buffer = io.BytesIO()
+                    
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        # Market Overview
+                        try:
+                            market_chart = exporter.create_market_overview_chart(analysis_data)
+                            market_img = exporter.export_chart_as_image(market_chart, format='png')
+                            zip_file.writestr(f"market_overview.png", market_img)
+                        except:
+                            pass
+                        
+                        # Competitor Analysis
+                        try:
+                            competitor_chart = exporter.create_competitor_analysis_chart(analysis_data)
+                            competitor_img = exporter.export_chart_as_image(competitor_chart, format='png')
+                            zip_file.writestr(f"competitor_analysis.png", competitor_img)
+                        except:
+                            pass
+                        
+                        # Target Segments
+                        try:
+                            segment_chart = exporter.create_target_segment_chart(analysis_data)
+                            segment_img = exporter.export_chart_as_image(segment_chart, format='png')
+                            zip_file.writestr(f"target_segments.png", segment_img)
+                        except:
+                            pass
+                        
+                        # Market Trends
+                        try:
+                            trends_chart = exporter.create_market_trends_chart(analysis_data)
+                            trends_img = exporter.export_chart_as_image(trends_chart, format='png')
+                            zip_file.writestr(f"market_trends.png", trends_img)
+                        except:
+                            pass
+                    
+                    zip_buffer.seek(0)
+                    
+                    st.download_button(
+                        label="⬇️ Download All Charts (ZIP)",
+                        data=zip_buffer.getvalue(),
+                        file_name=f"market_charts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+                    
+                    st.success("✅ All charts packaged!")
+                    
+                except Exception as e:
+                    st.error(f"Batch export failed: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
 
 
 class MarketAnalysisWizard:
