@@ -3,6 +3,7 @@ Export utilities for Market Intelligence - PDF and Chart exports
 """
 import logging
 import io
+import re
 import base64
 from typing import Dict, Any, List, Optional
 from datetime import datetime
