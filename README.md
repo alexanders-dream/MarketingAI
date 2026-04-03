@@ -2,7 +2,7 @@
 
 ## 🎯 Overview
 
-Marketing AI v3 is a sophisticated, AI-powered marketing content generation platform built with Streamlit. It combines advanced language models, market intelligence, and document processing to create comprehensive marketing strategies and content. The application features a streamlined 3-step workflow that guides users from business context setup through market analysis to content generation.
+Marketing AI v3 is a sophisticated, AI-powered marketing content generation platform built with Streamlit. Inspired by the agentic workflows of `open_deep_research`, it combines advanced language models, autonomous research agents, and RAG-powered document processing to create elite marketing strategies. The application features a streamlined 3-step workflow that guides users from automated business context extraction through deep market analysis to high-performance content generation.
 
 ## ✨ Key Features
 
@@ -13,9 +13,15 @@ Marketing AI v3 is a sophisticated, AI-powered marketing content generation plat
 - **LLM Pool Management:** Efficient caching and reuse of AI clients
 
 ### 📊 3-Step Workflow Process
-1. **Business Context Setup** - Define your brand, target audience, and goals
-2. **Market Intelligence** - Comprehensive market analysis with web scraping
-3. **Content Generation** - AI-powered marketing content creation
+1. **Business Context Setup** - Define your brand, target audience, and goals via RAG-powered document extraction
+2. **Market Intelligence** - Autonomous, agentic market research with multi-step Action/Reflection loops
+3. **Content Generation** - AI-powered marketing content creation with performance scoring and multi-platform optimization
+
+### 🧠 Autonomous Research Agents
+- **Multi-Agent Orchestration:** Supervisor, Researcher, Synthesizer, and Evaluator agents work in concert
+- **Action/Reflection Loops:** Intelligent gap analysis that spawns follow-up research for missing data
+- **Deep Intelligence:** Inspired by `open_deep_research` for high-fidelity market mapping
+- **Automated Synthesis:** Transforms raw search data into executive-level strategic reports
 
 ### 📄 Advanced Document Processing
 - **Supported Formats:** PDF, DOCX, TXT, MD files
@@ -28,7 +34,8 @@ Marketing AI v3 is a sophisticated, AI-powered marketing content generation plat
 - **Campaign Strategy** - Creative campaign concepts with implementation details
 - **Social Media Content Strategy** - Platform-specific content calendars and tactics
 - **SEO Optimization Strategy** - Technical and content SEO recommendations
-- **Post Composer** - Individual social media posts and blog content
+- **Post Composer** - Individual social media posts (Instagram, LinkedIn, Twitter), Blogs, Podcasts, and Media Briefs
+- **Content Performance Scoring:** Predictive evaluation of engagement, SEO, and conversion potential
 - **Market Analysis** - In-depth market research and competitive intelligence
 
 ### 🏢 Market Intelligence Hub
@@ -36,7 +43,7 @@ Marketing AI v3 is a sophisticated, AI-powered marketing content generation plat
 - **Market Trends** - Industry insights and opportunity identification
 - **Target Segmentation** - Detailed audience profiling and segmentation
 - **Growth Projections** - Market size and growth forecasting
-- **Web Scraping** - Guided research for comprehensive analysis
+- **Web Scraping:** Guided research via LLM-generated, context-aware queries for comprehensive analysis using Firecrawl
 
 ### 💾 Project Management
 - **Session Management** - Persistent project data across sessions
@@ -62,7 +69,10 @@ Marketing AI v3 is a sophisticated, AI-powered marketing content generation plat
 - **PDF Processing:** PyPDF2
 - **Office Documents:** python-docx
 - **Text Processing:** Built-in Python libraries
-- **Web Scraping:** firecrawl for market research
+
+### Web Scraping
+- **Scraping Engine:** Firecrawl (replaces legacy Crawl4AI)
+- **Smart Search:** LLM-generated queries instead of repetitive scraping loops
 
 ### Data Visualization
 - **Charts:** Plotly for interactive market analysis charts
@@ -124,21 +134,22 @@ OLLAMA_BASE_URL=http://localhost:11434
 ### Step 1: Business Context Setup
 1. **Access the application** at `http://localhost:8501`
 2. **Create a new project** or select an existing one
-3. **Upload business documents** (PDF, DOCX, TXT, MD) for context
-4. **Fill in business details:**
+3. **Upload business documents** (PDF, DOCX, TXT, MD)
+4. **Auto-Extract Context:** Use the "Extract from Documents" feature to automatically populate:
    - Company name and brand description
-   - Industry and target audience
-   - Products/services and marketing goals
-   - Existing content and SEO keywords
+   - Products/services and target audience
+   - Marketing goals and competitive advantages
+5. **Refine details:** Manually adjust extracted keywords and SEO tags
 
 ### Step 2: Market Intelligence
-1. **Run market analysis** with optional web scraping
-2. **Review comprehensive insights:**
-   - Competitive landscape analysis
-   - Market trends and opportunities
-   - Target audience segmentation
-   - Growth projections and sizing
-3. **Explore interactive dashboards** with charts and visualizations
+1. **Run market analysis** with autonomous agentic research
+2. **Action/Reflection Loop:** Watch as the Research Evaluator identifies gaps and executes targeted follow-up queries
+3. **Review comprehensive insights:**
+   - Detailed Executive Summaries with strategic implications
+   - Competitive landscape analysis and positioning matrices
+   - Market trends and growth opportunities with industry data
+   - Target audience segmentation and behavioral profiling
+4. **Explore interactive dashboards** with charts and visualizations
 
 ### Step 3: Content Generation
 1. **Select content type** from available marketing tasks
@@ -162,15 +173,15 @@ marketing-ai-v3/
 ├── config.py              # Configuration constants
 ├── session_manager.py     # Session and project management (in-memory storage)
 ├── llm_handler.py         # AI provider management
-├── content_generator.py   # Content generation engine
-├── market_analyzer.py     # Market intelligence analysis
-├── market_intelligence_ui.py  # Market analysis UI components
-├── ui_components.py       # Reusable UI components
-├── document_processor.py  # Document processing utilities
-├── web_scraper.py         # Web scraping for market research
-├── research_agents.py     # Research agent implementations
-├── parsers.py             # Text parsing and JSON extraction
-├── prompts.py             # AI prompt templates
+├── content_generator.py   # Content generation engine with performance scoring
+├── market_analyzer.py     # Market intelligence analysis & RAG extraction
+├── market_intelligence_ui.py  # Market analysis dashboard & workflow components
+├── ui_components.py       # Modular UI components for Streamlit
+├── document_processor.py  # Multi-format document processing & vectorization
+├── web_scraper.py         # Advanced scraping via Firecrawl & Jina Reader
+├── research_agents.py     # Autonomous agentic research framework (Action/Reflection)
+├── parsers.py             # Structured data extraction & JSON parsing
+├── prompts.py             # Optimized prompt engineering templates
 ├── utils.py               # Utility functions
 └── requirements.txt       # Python dependencies
 ```
