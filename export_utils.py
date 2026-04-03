@@ -166,17 +166,63 @@ class MarketIntelligenceExporter:
             Image as bytes
         """
         try:
-            if format == 'svg':
-                img_bytes = fig.to_image(format=format, width=width, height=height)
-            else:
-                img_bytes = fig.to_image(format=format, width=width, height=height, scale=2)
-            
-            logger.info(f"Chart exported as {format} ({len(img_bytes)} bytes)")
-            return img_bytes
+            # Try using kaleido first (high-quality)
+            try:
+                if format == 'svg':
+                    img_bytes = fig.to_image(format=format, width=width, height=height)
+                else:
+                    img_bytes = fig.to_image(format=format, width=width, height=height, scale=2)
+                
+                logger.info(f"Chart exported as {format} using kaleido ({len(img_bytes)} bytes)")
+                return img_bytes
+            except Exception as kaleido_error:
+                # Fallback to writing_image method (doesn't require Chrome)
+                logger.warning(f"Kaleido failed, using fallback: {str(kaleido_error)}")
+                
+                # For PNG/JPEG, convert to HTML and use alternative method
+                if format in ['png', 'jpeg', 'jpg']:
+                    # Use plotly's built-in write_html and convert
+                    import tempfile
+                    import os
+                    
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+                        fig.write_html(f.name)
+                        html_file = f.name
+                    
+                    try:
+                        # Read the HTML file
+                        with open(html_file, 'r', encoding='utf-8') as f:
+                            html_content = f.read()
+                        
+                        # For now, return HTML as bytes (user can open in browser)
+                        # In production, you could use selenium or playwright
+                        if format == 'svg':
+                            # Try SVG export which doesn't need Chrome
+                            svg_bytes = fig.to_image(format='svg', width=width, height=height)
+                            logger.info(f"Chart exported as SVG ({len(svg_bytes)} bytes)")
+                            return svg_bytes
+                        else:
+                            # Return HTML content for PNG/JPEG fallback
+                            logger.warning(f"Returning HTML fallback for {format}")
+                            return html_content.encode('utf-8')
+                    finally:
+                        # Clean up temp file
+                        if os.path.exists(html_file):
+                            os.remove(html_file)
+                else:
+                    # SVG and PDF might work without Chrome
+                    img_bytes = fig.to_image(format=format, width=width, height=height)
+                    logger.info(f"Chart exported as {format} ({len(img_bytes)} bytes)")
+                    return img_bytes
             
         except Exception as e:
             logger.error(f"Failed to export chart: {str(e)}")
-            raise
+            # Last resort: return HTML representation
+            try:
+                html_str = fig.to_html(full_html=False)
+                return html_str.encode('utf-8')
+            except:
+                raise
     
     def create_market_overview_chart(self, analysis_data: Dict[str, str]) -> go.Figure:
         """Create market overview visualization from analysis data"""

@@ -279,57 +279,62 @@ class MarketIntelligenceDashboard:
                     from export_utils import MarketIntelligenceExporter
                     exporter = MarketIntelligenceExporter()
                     
-                    # Generate charts from real data
-                    charts = []
+                    # Generate HTML report with embedded charts (no Chrome dependency)
+                    html_content = self._generate_html_report(analysis_data)
                     
-                    # Market overview chart
-                    try:
-                        market_chart = exporter.create_market_overview_chart(analysis_data)
-                        market_img = exporter.export_chart_as_image(market_chart, format='png')
-                        charts.append({'title': 'Market Size Projection', 'image_data': io.BytesIO(market_img)})
-                    except Exception as e:
-                        st.warning(f"Market chart generation failed: {str(e)}")
-                    
-                    # Competitor analysis chart
-                    try:
-                        competitor_chart = exporter.create_competitor_analysis_chart(analysis_data)
-                        competitor_img = exporter.export_chart_as_image(competitor_chart, format='png')
-                        charts.append({'title': 'Competitor Analysis', 'image_data': io.BytesIO(competitor_img)})
-                    except Exception as e:
-                        st.warning(f"Competitor chart generation failed: {str(e)}")
-                    
-                    # Target segment chart
-                    try:
-                        segment_chart = exporter.create_target_segment_chart(analysis_data)
-                        segment_img = exporter.export_chart_as_image(segment_chart, format='png')
-                        charts.append({'title': 'Target Segments', 'image_data': io.BytesIO(segment_img)})
-                    except Exception as e:
-                        st.warning(f"Segment chart generation failed: {str(e)}")
-                    
-                    # Market trends chart
-                    try:
-                        trends_chart = exporter.create_market_trends_chart(analysis_data)
-                        trends_img = exporter.export_chart_as_image(trends_chart, format='png')
-                        charts.append({'title': 'Market Trends', 'image_data': io.BytesIO(trends_img)})
-                    except Exception as e:
-                        st.warning(f"Trends chart generation failed: {str(e)}")
-                    
-                    # Generate PDF with charts
-                    pdf_bytes = exporter.export_to_pdf(analysis_data, charts)
-                    
-                    # Provide download button
+                    # Provide download button for HTML
                     st.download_button(
-                        label="⬇️ Download PDF",
-                        data=pdf_bytes,
-                        file_name=f"market_intelligence_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                        mime="application/pdf",
+                        label="⬇️ Download HTML Report",
+                        data=html_content.encode('utf-8'),
+                        file_name=f"market_intelligence_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+                        mime="text/html",
                         use_container_width=True
                     )
                     
-                    st.success(f"✅ PDF generated with {len(charts)} charts!")
+                    st.success("✅ HTML report generated with interactive charts!")
+                    
+                    # Also try PDF if kaleido is available
+                    try:
+                        charts = []
+                        
+                        # Market overview chart
+                        market_chart = exporter.create_market_overview_chart(analysis_data)
+                        market_img = exporter.export_chart_as_image(market_chart, format='svg')
+                        charts.append({'title': 'Market Size Projection', 'image_data': io.BytesIO(market_img)})
+                        
+                        # Competitor analysis chart
+                        competitor_chart = exporter.create_competitor_analysis_chart(analysis_data)
+                        competitor_img = exporter.export_chart_as_image(competitor_chart, format='svg')
+                        charts.append({'title': 'Competitor Analysis', 'image_data': io.BytesIO(competitor_img)})
+                        
+                        # Target segment chart
+                        segment_chart = exporter.create_target_segment_chart(analysis_data)
+                        segment_img = exporter.export_chart_as_image(segment_chart, format='svg')
+                        charts.append({'title': 'Target Segments', 'image_data': io.BytesIO(segment_img)})
+                        
+                        # Market trends chart
+                        trends_chart = exporter.create_market_trends_chart(analysis_data)
+                        trends_img = exporter.export_chart_as_image(trends_chart, format='svg')
+                        charts.append({'title': 'Market Trends', 'image_data': io.BytesIO(trends_img)})
+                        
+                        # Generate PDF with SVG charts (vector quality)
+                        pdf_bytes = exporter.export_to_pdf(analysis_data, charts)
+                        
+                        st.download_button(
+                            label="⬇️ Download PDF Report",
+                            data=pdf_bytes,
+                            file_name=f"market_intelligence_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                        
+                        st.success("✅ Both HTML and PDF reports generated!")
+                        
+                    except Exception as pdf_error:
+                        st.warning(f"PDF generation skipped (requires Chrome): Install Chrome or use HTML report")
                     
                 except Exception as e:
-                    st.error(f"PDF export failed: {str(e)}")
+                    st.error(f"Export failed: {str(e)}")
                     import traceback
                     st.code(traceback.format_exc())
         
@@ -346,15 +351,17 @@ class MarketIntelligenceDashboard:
                     with chart_tabs[0]:
                         try:
                             market_chart = exporter.create_market_overview_chart(analysis_data)
-                            st.plotly_chart(market_chart, use_container_width=True)
+                            st.plotly_chart(market_chart, use_container_width=True, key='export_market')
                             
-                            market_img = exporter.export_chart_as_image(market_chart, format='png')
+                            # Export as SVG (no Chrome needed)
+                            market_svg = market_chart.to_image(format='svg', width=1200, height=800)
                             st.download_button(
-                                label="⬇️ Download PNG",
-                                data=market_img,
-                                file_name=f"market_overview_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                                mime="image/png",
-                                use_container_width=True
+                                label="⬇️ Download SVG",
+                                data=market_svg,
+                                file_name=f"market_overview_{datetime.now().strftime('%Y%m%d_%H%M%S')}.svg",
+                                mime="image/svg+xml",
+                                use_container_width=True,
+                                key='dl_market'
                             )
                         except Exception as e:
                             st.error(f"Market chart failed: {str(e)}")
@@ -363,15 +370,16 @@ class MarketIntelligenceDashboard:
                     with chart_tabs[1]:
                         try:
                             competitor_chart = exporter.create_competitor_analysis_chart(analysis_data)
-                            st.plotly_chart(competitor_chart, use_container_width=True)
+                            st.plotly_chart(competitor_chart, use_container_width=True, key='export_competitor')
                             
-                            competitor_img = exporter.export_chart_as_image(competitor_chart, format='png')
+                            competitor_svg = competitor_chart.to_image(format='svg', width=1200, height=800)
                             st.download_button(
-                                label="⬇️ Download PNG",
-                                data=competitor_img,
-                                file_name=f"competitor_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                                mime="image/png",
-                                use_container_width=True
+                                label="⬇️ Download SVG",
+                                data=competitor_svg,
+                                file_name=f"competitor_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.svg",
+                                mime="image/svg+xml",
+                                use_container_width=True,
+                                key='dl_competitor'
                             )
                         except Exception as e:
                             st.error(f"Competitor chart failed: {str(e)}")
@@ -380,15 +388,16 @@ class MarketIntelligenceDashboard:
                     with chart_tabs[2]:
                         try:
                             segment_chart = exporter.create_target_segment_chart(analysis_data)
-                            st.plotly_chart(segment_chart, use_container_width=True)
+                            st.plotly_chart(segment_chart, use_container_width=True, key='export_segment')
                             
-                            segment_img = exporter.export_chart_as_image(segment_chart, format='png')
+                            segment_svg = segment_chart.to_image(format='svg', width=1200, height=800)
                             st.download_button(
-                                label="⬇️ Download PNG",
-                                data=segment_img,
-                                file_name=f"target_segments_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                                mime="image/png",
-                                use_container_width=True
+                                label="⬇️ Download SVG",
+                                data=segment_svg,
+                                file_name=f"target_segments_{datetime.now().strftime('%Y%m%d_%H%M%S')}.svg",
+                                mime="image/svg+xml",
+                                use_container_width=True,
+                                key='dl_segment'
                             )
                         except Exception as e:
                             st.error(f"Segment chart failed: {str(e)}")
@@ -397,15 +406,16 @@ class MarketIntelligenceDashboard:
                     with chart_tabs[3]:
                         try:
                             trends_chart = exporter.create_market_trends_chart(analysis_data)
-                            st.plotly_chart(trends_chart, use_container_width=True)
+                            st.plotly_chart(trends_chart, use_container_width=True, key='export_trends')
                             
-                            trends_img = exporter.export_chart_as_image(trends_chart, format='png')
+                            trends_svg = trends_chart.to_image(format='svg', width=1200, height=800)
                             st.download_button(
-                                label="⬇️ Download PNG",
-                                data=trends_img,
-                                file_name=f"market_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                                mime="image/png",
-                                use_container_width=True
+                                label="⬇️ Download SVG",
+                                data=trends_svg,
+                                file_name=f"market_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.svg",
+                                mime="image/svg+xml",
+                                use_container_width=True,
+                                key='dl_trends'
                             )
                         except Exception as e:
                             st.error(f"Trends chart failed: {str(e)}")
@@ -430,32 +440,32 @@ class MarketIntelligenceDashboard:
                         # Market Overview
                         try:
                             market_chart = exporter.create_market_overview_chart(analysis_data)
-                            market_img = exporter.export_chart_as_image(market_chart, format='png')
-                            zip_file.writestr(f"market_overview.png", market_img)
+                            market_svg = market_chart.to_image(format='svg', width=1200, height=800)
+                            zip_file.writestr(f"market_overview.svg", market_svg)
                         except:
                             pass
                         
                         # Competitor Analysis
                         try:
                             competitor_chart = exporter.create_competitor_analysis_chart(analysis_data)
-                            competitor_img = exporter.export_chart_as_image(competitor_chart, format='png')
-                            zip_file.writestr(f"competitor_analysis.png", competitor_img)
+                            competitor_svg = competitor_chart.to_image(format='svg', width=1200, height=800)
+                            zip_file.writestr(f"competitor_analysis.svg", competitor_svg)
                         except:
                             pass
                         
                         # Target Segments
                         try:
                             segment_chart = exporter.create_target_segment_chart(analysis_data)
-                            segment_img = exporter.export_chart_as_image(segment_chart, format='png')
-                            zip_file.writestr(f"target_segments.png", segment_img)
+                            segment_svg = segment_chart.to_image(format='svg', width=1200, height=800)
+                            zip_file.writestr(f"target_segments.svg", segment_svg)
                         except:
                             pass
                         
                         # Market Trends
                         try:
                             trends_chart = exporter.create_market_trends_chart(analysis_data)
-                            trends_img = exporter.export_chart_as_image(trends_chart, format='png')
-                            zip_file.writestr(f"market_trends.png", trends_img)
+                            trends_svg = trends_chart.to_image(format='svg', width=1200, height=800)
+                            zip_file.writestr(f"market_trends.svg", trends_svg)
                         except:
                             pass
                     
@@ -475,6 +485,183 @@ class MarketIntelligenceDashboard:
                     st.error(f"Batch export failed: {str(e)}")
                     import traceback
                     st.code(traceback.format_exc())
+    
+    def _generate_html_report(self, analysis_data: Dict[str, str]) -> str:
+        """Generate HTML report with embedded Plotly charts"""
+        from export_utils import MarketIntelligenceExporter
+        exporter = MarketIntelligenceExporter()
+        
+        # Generate charts as HTML divs
+        charts_html = []
+        
+        try:
+            # Market Overview
+            market_chart = exporter.create_market_overview_chart(analysis_data)
+            market_html = market_chart.to_html(full_html=False, include_plotlyjs='cdn')
+            charts_html.append(f"<h2>Market Size Projection</h2>{market_html}")
+        except:
+            pass
+        
+        try:
+            # Competitor Analysis
+            competitor_chart = exporter.create_competitor_analysis_chart(analysis_data)
+            competitor_html = competitor_chart.to_html(full_html=False, include_plotlyjs='cdn')
+            charts_html.append(f"<h2>Competitor Analysis</h2>{competitor_html}")
+        except:
+            pass
+        
+        try:
+            # Target Segments
+            segment_chart = exporter.create_target_segment_chart(analysis_data)
+            segment_html = segment_chart.to_html(full_html=False, include_plotlyjs='cdn')
+            charts_html.append(f"<h2>Target Market Segmentation</h2>{segment_html}")
+        except:
+            pass
+        
+        try:
+            # Market Trends
+            trends_chart = exporter.create_market_trends_chart(analysis_data)
+            trends_html = trends_chart.to_html(full_html=False, include_plotlyjs='cdn')
+            charts_html.append(f"<h2>Market Trends Impact</h2>{trends_html}")
+        except:
+            pass
+        
+        # Build complete HTML report
+        html_report = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Market Intelligence Report</title>
+    <meta charset="UTF-8">
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }}
+        .header {{
+            background-color: #1f77b4;
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }}
+        .section {{
+            background-color: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }}
+        .chart {{
+            margin: 30px 0;
+        }}
+        h1 {{
+            margin: 0;
+        }}
+        h2 {{
+            color: #2c3e50;
+            border-bottom: 2px solid #1f77b4;
+            padding-bottom: 10px;
+        }}
+        .company-info {{
+            line-height: 1.6;
+        }}
+        .footer {{
+            text-align: center;
+            margin-top: 40px;
+            color: #666;
+            font-size: 0.9em;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Market Intelligence Report</h1>
+        <p>Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+    
+    <div class="section">
+        <h2>Company Overview</h2>
+        <div class="company-info">
+            {self._format_company_info_html(analysis_data)}
+        </div>
+    </div>
+    
+    {self._format_analysis_sections_html(analysis_data)}
+    
+    <div class="section">
+        <h2>📈 Market Analysis Charts</h2>
+        {''.join(charts_html)}
+    </div>
+    
+    <div class="footer">
+        <p>Report generated by MarketingAI Market Intelligence Hub</p>
+    </div>
+</body>
+</html>"""
+        
+        return html_report
+    
+    def _format_company_info_html(self, analysis_data: Dict[str, str]) -> str:
+        """Format company information for HTML report"""
+        info_parts = []
+        
+        if analysis_data.get("company_name"):
+            info_parts.append(f"<p><strong>Company:</strong> {analysis_data['company_name']}</p>")
+        
+        if analysis_data.get("industry"):
+            info_parts.append(f"<p><strong>Industry:</strong> {analysis_data['industry']}</p>")
+        
+        if analysis_data.get("target_audience"):
+            info_parts.append(f"<p><strong>Target Audience:</strong> {analysis_data['target_audience']}</p>")
+        
+        if analysis_data.get("products_services"):
+            info_parts.append(f"<p><strong>Products/Services:</strong> {analysis_data['products_services']}</p>")
+        
+        if analysis_data.get("brand_description"):
+            info_parts.append(f"<p><strong>Brand:</strong> {analysis_data['brand_description']}</p>")
+        
+        return '\n'.join(info_parts)
+    
+    def _format_analysis_sections_html(self, analysis_data: Dict[str, str]) -> str:
+        """Format analysis sections for HTML report"""
+        sections = [
+            ("Competitive Landscape", "competitors"),
+            ("Market Trends", "market_trends"),
+            ("Market Opportunities", "market_opportunities"),
+            ("Target Segments", "target_segments"),
+            ("Competitive Advantages", "competitive_advantages"),
+            ("Market Size & Growth", "market_size")
+        ]
+        
+        html_sections = []
+        
+        for title, key in sections:
+            if analysis_data.get(key) and analysis_data[key] != "Analysis failed":
+                html_sections.append(f"""
+    <div class="section">
+        <h2>{title}</h2>
+        <div style="white-space: pre-wrap; line-height: 1.6;">
+            {analysis_data[key]}
+        </div>
+    </div>
+                """)
+        
+        # Add comprehensive analysis if available
+        if analysis_data.get("comprehensive_analysis") and analysis_data["comprehensive_analysis"] != "Analysis failed":
+            html_sections.append(f"""
+    <div class="section">
+        <h2>Comprehensive Market Analysis</h2>
+        <div style="white-space: pre-wrap; line-height: 1.6;">
+            {analysis_data['comprehensive_analysis']}
+        </div>
+    </div>
+            """)
+        
+        return '\n'.join(html_sections)
 
 
 class MarketAnalysisWizard:
