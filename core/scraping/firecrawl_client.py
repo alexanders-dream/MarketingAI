@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 import time
 from datetime import datetime
 from firecrawl import FirecrawlApp
-from config import AppConfig
+from core.config import AppConfig
 
 logger = logging.getLogger(__name__)
 

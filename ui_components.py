@@ -12,12 +12,14 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 from datetime import datetime
 
-from config import AppConfig
-from llm_handler import LLMProviderHandler
-from session_manager import SessionManager
+from core.config import AppConfig
+from core.llm.handler import LLMProviderHandler
+import io
+from fpdf import FPDF
+from core.scraping.firecrawl_client import WebScraper
+from core.prompts.legacy import Prompts
 from document_processor import DocumentProcessor
-from web_scraper import WebScraper
-from prompts import Prompts
+from session_manager import SessionManager
 from parsers import extract_json_from_text
 from utils import convert_to_docx
 import re

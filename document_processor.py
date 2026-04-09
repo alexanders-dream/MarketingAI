@@ -12,7 +12,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
 from langchain_core.documents import Document
 
-from config import AppConfig
+from core.config import AppConfig
 
 logger = logging.getLogger(__name__)
 

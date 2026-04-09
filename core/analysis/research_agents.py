@@ -14,8 +14,8 @@ from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
 from pydantic import BaseModel, Field
 from langchain_community.vectorstores import FAISS
 
-from web_scraper import WebScraper
-from config import AppConfig
+from core.scraping.firecrawl_client import WebScraper
+from core.config import AppConfig
 
 logger = logging.getLogger(__name__)
 

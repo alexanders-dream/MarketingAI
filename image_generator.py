@@ -9,8 +9,8 @@ from io import BytesIO
 from PIL import Image
 import google.generativeai as genai
 
-from config import AppConfig
-from prompts import MarketingImagePromptGenerator
+from core.config import AppConfig
+from core.prompts.legacy import MarketingImagePromptGenerator
 
 logger = logging.getLogger(__name__)
 

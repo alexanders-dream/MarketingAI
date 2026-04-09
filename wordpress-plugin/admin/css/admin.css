@@ -1,0 +1,48 @@
+.mkai-wrap {
+    max-width: 1000px;
+    margin: 20px 20px 0 0;
+}
+
+.mkai-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.mkai-dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.mkai-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.mkai-badge.success, .mkai-badge.status-completed { background: #d4edda; color: #155724; }
+.mkai-badge.info, .mkai-badge.status-in_progress { background: #cce5ff; color: #004085; }
+.mkai-badge.warning, .mkai-badge.status-pending, .mkai-badge.status-pending_review { background: #fff3cd; color: #856404; }
+.mkai-badge.agent-content { background: #e2e3e5; color: #383d41; }
+.mkai-badge.agent-social { background: #d1ecf1; color: #0c5460; }
+
+.mkai-form-group {
+    margin-bottom: 15px;
+}
+.mkai-form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+#mkai-strategy-spinner {
+    float: none;
+    margin: 4px 10px 0;
+}

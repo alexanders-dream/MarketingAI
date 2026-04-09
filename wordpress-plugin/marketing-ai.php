@@ -3,7 +3,7 @@
  * Plugin Name:       Marketing AI
  * Plugin URI:        https://marketingai.com/wordpress-plugin
  * Description:       AI-powered marketing content generation for WordPress. Create blog posts, social media content, and marketing copy with advanced AI.
- * Version:           1.0.0
+ * Version:           2.0.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Your Name
@@ -20,7 +20,7 @@ if (!defined('WPINC')) {
 }
 
 // Plugin version
-define('MARKETING_AI_VERSION', '1.0.0');
+define('MARKETING_AI_VERSION', '2.0.0');
 define('MARKETING_AI_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('MARKETING_AI_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('MARKETING_AI_API_BASE_URL', 'https://api.marketingai.com/v1');
@@ -45,9 +45,17 @@ register_activation_hook(__FILE__, 'activate_marketing_ai');
 register_deactivation_hook(__FILE__, 'deactivate_marketing_ai');
 
 /**
- * The core plugin class
+ * The core plugin class and components
  */
 require MARKETING_AI_PLUGIN_DIR . 'includes/class-marketing-ai.php';
+require MARKETING_AI_PLUGIN_DIR . 'includes/class-api-client.php';
+require MARKETING_AI_PLUGIN_DIR . 'includes/class-context-extractor.php';
+require MARKETING_AI_PLUGIN_DIR . 'includes/class-image-extractor.php';
+require MARKETING_AI_PLUGIN_DIR . 'includes/class-task-calendar.php';
+require MARKETING_AI_PLUGIN_DIR . 'includes/class-cron-manager.php';
+require MARKETING_AI_PLUGIN_DIR . 'includes/class-webhook-receiver.php';
+require MARKETING_AI_PLUGIN_DIR . 'includes/class-subscription-manager.php';
+require MARKETING_AI_PLUGIN_DIR . 'includes/class-admin-ui.php';
 
 /**
  * Begins execution of the plugin.

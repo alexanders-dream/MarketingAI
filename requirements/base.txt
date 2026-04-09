@@ -1,0 +1,16 @@
+# Core shared dependencies
+langchain
+langchain-core
+langchain-text-splitters
+langchain-community
+langchain-classic
+langchain-huggingface
+sentence-transformers
+faiss-cpu
+pydantic
+pydantic-settings
+python-dotenv
+requests
+httpx
+python-jose
+stripe

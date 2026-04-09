@@ -11,9 +11,10 @@ from langchain_classic.chains.retrieval import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_community.vectorstores import FAISS
 
-from config import AppConfig
-from web_scraper import scrape_market_data_sync, scrape_competitor_data_sync
-from research_agents import GuidedMarketResearch, BusinessContext
+from core.config import AppConfig
+from core.scraping.firecrawl_client import scrape_market_data_sync, scrape_competitor_data_sync
+from core.analysis.research_agents import GuidedMarketResearch, BusinessContext
+from core.llm.handler import get_llm_for_agent
 
 logger = logging.getLogger(__name__)
 
@@ -590,10 +591,10 @@ class MarketAnalyzer:
         """Generate comprehensive market analysis with advanced research capabilities"""
         try:
             # Initialize components
-            llm = self.llm_manager.get_llm()
+            llm = get_llm_for_agent("market_analyzer")
             
             # Extract business context
-            business_info = self._extract_business_context(business_context)
+            business_info = self._extract_business_context(llm, None, company_name=business_context.get("company_name"), industry=business_context.get("industry"))
             
             # Generate keywords first
             keywords = self._generate_market_keywords(llm, business_info)

@@ -707,7 +707,7 @@ class MarketAnalysisWizard:
                     # Use dependency injection - analyzer should be passed in constructor
                     # or use a factory pattern to avoid circular imports
                     try:
-                        from market_analyzer import MarketAnalyzer
+                        from core.analysis.market_analyzer import MarketAnalyzer
                         analyzer = MarketAnalyzer()
                     except ImportError as e:
                         st.error(f"Failed to import MarketAnalyzer: {str(e)}")

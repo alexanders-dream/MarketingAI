@@ -1,0 +1,34 @@
+FROM python:3.10-slim as builder
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements/base.txt requirements/workers.txt ./requirements/
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements/workers.txt
+
+FROM python:3.10-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy wheels and install
+COPY --from=builder /app/wheels /wheels
+COPY --from=builder /app/requirements /app/requirements
+RUN pip install --no-cache /wheels/*
+
+# Copy app code
+COPY core/ ./core/
+COPY workers/ ./workers/
+
+# Run Celery Worker
+CMD ["celery", "-A", "workers.celery_app", "worker", "--loglevel=info"]

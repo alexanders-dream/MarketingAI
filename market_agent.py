@@ -6,9 +6,9 @@ import streamlit as st
 import logging
 from typing import Dict, Any
 
-from config import AppConfig
-from session_manager import SessionManager
-from llm_handler import LLMManager
+from core.config import AppConfig
+from core.scraping.firecrawl_client import WebScraper
+from core.llm.handler import LLMManager
 from ui_components import SidebarManager, ProjectManager, BusinessContextManager, ContentDisplay
 from market_intelligence_ui import MarketIntelligenceDashboard, MarketAnalysisWizard
 from content_generator import ContentGenerator

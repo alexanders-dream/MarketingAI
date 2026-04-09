@@ -1,0 +1,15 @@
+-r base.txt
+fastapi
+uvicorn[standard]
+asyncpg
+alembic
+langchain-groq
+langchain-openai
+langchain-google-genai
+langchain-ollama
+firecrawl-py
+beautifulsoup4
+PyPDF2
+python-docx
+docx2txt
+pypdf

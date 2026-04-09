@@ -1,0 +1,9 @@
+-r base.txt
+streamlit
+streamlit-clipboard
+plotly
+pillow
+opencv-python-headless
+torchvision
+kaleido
+reportlab

@@ -1,0 +1,7 @@
+-r backend.txt
+-r workers.txt
+-r dashboard.txt
+pytest
+pytest-asyncio
+ruff
+mypy
